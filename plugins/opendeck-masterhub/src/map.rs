@@ -186,6 +186,7 @@ pub fn registration_payload() -> Value {
         "encoders": ENCODERS,
         "type": DEVICE_TYPE,
         "encoder": encoder_descriptors(),
+        "layoutVersion": 1,
         "layout": device_layout(),
     })
 }
@@ -206,59 +207,85 @@ fn descriptor(kind: &str, is_absolute: bool) -> Value {
     serde_json::json!({ "type": kind, "is_absolute": is_absolute })
 }
 
+/// Same outer size as OpenDeck's legacy key cell. Explicit layouts are not scaled up.
+const CELL: u16 = 132;
+const GAP: u16 = 24;
+
+/// Keys, then the two rollers, then the knob cluster beside the dial.
+///
+/// The three knobs are a 2×2 block: the top knob is centered on the first row,
+/// and the other two fill the second row. The dial's box is that same block.
+/// Neighboring controls are separated by [`GAP`].
 fn device_layout() -> Value {
-    grid(
-        3,
-        1,
-        vec![
-            cell(serde_json::json!({ "type": "keys", "rows": 3, "columns": 5, "position": 0 })),
-            cell(grid(
-                1,
-                2,
-                vec![cell(encoder_node(3)), cell(encoder_node(4))],
-            )),
-            cell(grid(
-                1,
-                2,
-                vec![
-                    cell(grid(
-                        2,
-                        2,
-                        vec![
-                            spanned(encoder_node(0), 2, 1),
-                            cell(encoder_node(1)),
-                            cell(encoder_node(2)),
-                        ],
-                    )),
-                    cell(grid(
-                        2,
-                        2,
-                        vec![spanned(encoder_node(BIG_KNOB_ENCODER), 2, 2)],
-                    )),
-                ],
-            )),
-        ],
-    )
-}
+    let pitch = CELL + GAP;
+    let keys_width = u16::from(COLUMNS) * CELL + u16::from(COLUMNS - 1) * GAP;
+    let keys_height = u16::from(ROWS) * CELL + u16::from(ROWS - 1) * GAP;
+    let cluster = CELL * 2 + GAP;
+    let canvas_width = keys_width;
+    let rollers_top = keys_height + GAP;
+    let bottom_top = rollers_top + CELL + GAP;
+    let canvas_height = bottom_top + cluster;
+    let rollers_left = (canvas_width - cluster) / 2;
+    let bottom_left = (canvas_width - (cluster * 2 + GAP)) / 2;
 
-fn grid(rows: u8, columns: u8, cells: Vec<Value>) -> Value {
-    serde_json::json!({ "type": "grid", "rows": rows, "columns": columns, "cells": cells })
-}
+    let mut controls = Vec::with_capacity(usize::from(ROWS * COLUMNS + ENCODERS));
+    for position in 0..ROWS * COLUMNS {
+        let column = u16::from(position % COLUMNS);
+        let row = u16::from(position / COLUMNS);
+        controls.push(key(position, column * pitch, row * pitch));
+    }
+    controls.push(encoder_cell(ROLLER_ENCODER, rollers_left, rollers_top));
+    controls.push(encoder_cell(
+        ROLLER_ENCODER + 1,
+        rollers_left + pitch,
+        rollers_top,
+    ));
+    controls.push(encoder(
+        0,
+        bottom_left + cluster / 2,
+        bottom_top + CELL / 2,
+        CELL / 2,
+    ));
+    controls.push(encoder_cell(1, bottom_left, bottom_top + pitch));
+    controls.push(encoder_cell(2, bottom_left + pitch, bottom_top + pitch));
+    controls.push(encoder(
+        BIG_KNOB_ENCODER,
+        bottom_left + cluster + GAP + cluster / 2,
+        bottom_top + cluster / 2,
+        cluster / 2,
+    ));
 
-fn cell(item: Value) -> Value {
-    spanned(item, 1, 1)
-}
-
-fn spanned(item: Value, column_span: u8, row_span: u8) -> Value {
     serde_json::json!({
-        "column_span": column_span,
-        "row_span": row_span,
-        "item": item,
+        "canvas": { "width": canvas_width, "height": canvas_height, "unit": "px" },
+        "controls": controls,
     })
 }
 
-fn encoder_node(position: u8) -> Value {
-    serde_json::json!({ "type": "encoder", "position": position })
+fn key(position: u8, x: u16, y: u16) -> Value {
+    serde_json::json!({
+        "controller": "Keypad",
+        "position": position,
+        "shape": "rect",
+        "x": x,
+        "y": y,
+        "width": CELL,
+        "height": CELL,
+    })
+}
+
+fn encoder_cell(position: u8, x: u16, y: u16) -> Value {
+    encoder(position, x + CELL / 2, y + CELL / 2, CELL / 2)
+}
+
+fn encoder(position: u8, cx: u16, cy: u16, r: u16) -> Value {
+    serde_json::json!({
+        "controller": "Encoder",
+        "position": position,
+        "shape": "circle",
+        "cx": cx,
+        "cy": cy,
+        "r": r,
+    })
 }
 
 fn jpeg_base64_from_data_url(data_url: &str) -> Option<String> {
@@ -389,33 +416,84 @@ mod tests {
             .iter()
             .all(|encoder| encoder["type"] != "slider"));
 
+        assert_eq!(payload["layoutVersion"], 1);
         let layout = &payload["layout"];
-        assert_eq!(layout["type"], "grid");
-        assert_eq!(layout["rows"], 3);
-        assert_eq!(layout["columns"], 1);
-        assert_eq!(layout["cells"][0]["item"]["type"], "keys");
-        assert_eq!(layout["cells"][0]["item"]["rows"], 3);
-        assert_eq!(layout["cells"][0]["item"]["columns"], 5);
+        assert_eq!(layout["canvas"]["width"], 756);
+        assert_eq!(layout["canvas"]["height"], 912);
+        assert_eq!(layout["canvas"]["unit"], "px");
+        let controls = layout["controls"].as_array().unwrap();
+        assert_eq!(controls.len(), 21);
 
-        let rollers = &layout["cells"][1]["item"];
-        assert_eq!(rollers["rows"], 1);
-        assert_eq!(rollers["columns"], 2);
-        assert_eq!(rollers["cells"][0]["item"]["position"], 3);
-        assert_eq!(rollers["cells"][1]["item"]["position"], 4);
+        for position in 0..15u64 {
+            let key = control(controls, "Keypad", position);
+            assert_eq!(key["shape"], "rect");
+            assert_eq!(key["width"], 132);
+            assert_eq!(key["height"], 132);
+            assert_eq!(key["x"], (position % 5) * 156);
+            assert_eq!(key["y"], (position / 5) * 156);
+        }
 
-        let bottom = &layout["cells"][2]["item"];
-        assert_eq!(bottom["rows"], 1);
-        assert_eq!(bottom["columns"], 2);
-        let knobs = &bottom["cells"][0]["item"];
-        assert_eq!(knobs["cells"][0]["column_span"], 2);
-        assert_eq!(knobs["cells"][0]["row_span"], 1);
-        assert_eq!(knobs["cells"][0]["item"]["position"], 0);
-        assert_eq!(knobs["cells"][1]["item"]["position"], 1);
-        assert_eq!(knobs["cells"][2]["item"]["position"], 2);
-        let big = &bottom["cells"][1]["item"];
-        assert_eq!(big["cells"][0]["column_span"], 2);
-        assert_eq!(big["cells"][0]["row_span"], 2);
-        assert_eq!(big["cells"][0]["item"]["position"], 5);
+        let top = control(controls, "Encoder", 0);
+        let lower_left = control(controls, "Encoder", 1);
+        let lower_right = control(controls, "Encoder", 2);
+        let dial = control(controls, "Encoder", 5);
+        let roller_left = control(controls, "Encoder", 3);
+        let roller_right = control(controls, "Encoder", 4);
+        for encoder in [
+            top,
+            lower_left,
+            lower_right,
+            dial,
+            roller_left,
+            roller_right,
+        ] {
+            assert_eq!(encoder["shape"], "circle");
+        }
+
+        let radius = lower_left["r"].as_u64().unwrap();
+        assert_eq!(top["r"], radius);
+        assert_eq!(lower_right["r"], radius);
+        assert_eq!(lower_left["cy"], lower_right["cy"]);
+        assert_eq!(
+            top["cx"].as_u64().unwrap(),
+            (lower_left["cx"].as_u64().unwrap() + lower_right["cx"].as_u64().unwrap()) / 2
+        );
+        assert!(top["cy"].as_u64().unwrap() < lower_left["cy"].as_u64().unwrap());
+
+        let cluster_left = lower_left["cx"].as_u64().unwrap() - radius;
+        let cluster_right = lower_right["cx"].as_u64().unwrap() + radius;
+        let cluster_top = top["cy"].as_u64().unwrap() - radius;
+        let cluster_bottom = lower_left["cy"].as_u64().unwrap() + radius;
+        let cluster_size = cluster_right - cluster_left;
+        assert_eq!(cluster_bottom - cluster_top, cluster_size);
+        assert_eq!(dial["r"].as_u64().unwrap() * 2, cluster_size);
+        assert_eq!(
+            dial["cy"].as_u64().unwrap(),
+            (cluster_top + cluster_bottom) / 2
+        );
+        assert_eq!(
+            dial["cx"].as_u64().unwrap() - dial["r"].as_u64().unwrap(),
+            cluster_right + u64::from(GAP)
+        );
+        assert_eq!(
+            lower_right["cx"].as_u64().unwrap()
+                - radius
+                - (lower_left["cx"].as_u64().unwrap() + radius),
+            u64::from(GAP)
+        );
+
+        assert_eq!(roller_left["r"], radius);
+        assert_eq!(roller_right["r"], radius);
+        assert_eq!(roller_left["cy"], roller_right["cy"]);
+        assert!(roller_left["cx"].as_u64().unwrap() < roller_right["cx"].as_u64().unwrap());
+        assert!(roller_left["cy"].as_u64().unwrap() + radius <= cluster_top);
+    }
+
+    fn control<'a>(controls: &'a [Value], controller: &str, position: u64) -> &'a Value {
+        controls
+            .iter()
+            .find(|control| control["controller"] == controller && control["position"] == position)
+            .unwrap_or_else(|| panic!("missing {controller} {position}"))
     }
 
     #[test]

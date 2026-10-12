@@ -12,6 +12,8 @@ Default URL: `ws://127.0.0.1:9123`
 
 Set `MASTERHUBD_LISTEN` to another `host:port` (for example `127.0.0.1:0` in tests). The process listens on that address and prints the bound URL on stderr.
 
+Set `MASTERHUBD_DEBUG=1` (or `true`) to print each published action on stderr. That covers hardware input from every module and injected triggers. `data_base64` is replaced with its character count.
+
 Frames are JSON text. Binary frames are rejected with an error message. A single frame may be at most 128 KiB; a larger frame closes the connection.
 
 There is no authentication. Binding to localhost is the access boundary. Any connected client may send triggers. Triggers are the development injection path a simulator uses in place of USB.

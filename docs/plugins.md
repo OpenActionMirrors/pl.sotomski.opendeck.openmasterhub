@@ -1,6 +1,6 @@
 # OpenDeck
 
-`plugins/opendeck-masterhub` is the device plugin. OpenDeck starts it. If nothing is listening on `ws://127.0.0.1:9123` (`MASTERHUBD_LISTEN`), the plugin starts `masterhubd` in the same process. A `masterhubd` that is already listening is left running, and the plugin connects to it. While that socket is open, the plugin registers a device named Master Hub (`mh-simulator`). The daemon the plugin started exits with the plugin.
+`plugins/opendeck-masterhub` is the device plugin. OpenDeck starts it. If nothing is listening on `ws://127.0.0.1:9123` (`MASTERHUBD_LISTEN`), the plugin starts `masterhubd` in the same process. A `masterhubd` that is already listening is left running, and the plugin connects to it. While that socket is open, the plugin registers a device named Master Hub (`mh-simulator`). The daemon the plugin started exits with the plugin. Set `MASTERHUBD_DEBUG=1` in the environment before starting OpenDeck to print each published action on that process’s stderr.
 
 Hardware events from the daemon become OpenDeck key and encoder events:
 

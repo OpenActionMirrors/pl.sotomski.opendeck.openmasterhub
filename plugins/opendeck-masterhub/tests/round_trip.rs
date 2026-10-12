@@ -134,8 +134,14 @@ async fn key_press_and_image_round_trip() {
     assert_eq!(device["payload"]["rows"], 3);
     assert_eq!(device["payload"]["columns"], 5);
     assert_eq!(device["payload"]["encoders"], 6);
-    assert_eq!(device["payload"]["layout"]["type"], "grid");
-    assert_eq!(device["payload"]["layout"]["rows"], 3);
+    assert_eq!(device["payload"]["layoutVersion"], 1);
+    assert_eq!(
+        device["payload"]["layout"]["controls"]
+            .as_array()
+            .unwrap()
+            .len(),
+        21
+    );
     assert_eq!(device["payload"]["encoder"][5]["type"], "rotary");
     assert_eq!(device["payload"]["encoder"][5]["is_absolute"], false);
     assert!(device["payload"]["encoder"]
