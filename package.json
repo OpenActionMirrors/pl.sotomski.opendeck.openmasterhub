@@ -1,0 +1,17 @@
+{
+  "name": "openmasterhub",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cross-platform driver and application stack for the MasterHub",
+  "packageManager": "pnpm@12.11.2+sha512.25a51652a196785af5f28bda6dfe8dc582ebefa4ac1d180221ce1390231c5fb76637822ea4b6e4633ce74acdcb0a77f725af11bad38177fdeddaee818a955cb9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "validate:plugins": "python3 scripts/validate_plugins.py",
+    "build:daemons": "cargo build --manifest-path daemons/Cargo.toml",
+    "package:opendeck": "sh scripts/package_opendeck_plugin.sh"
+  }
+}

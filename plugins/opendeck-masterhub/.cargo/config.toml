@@ -1,0 +1,9 @@
+[target.x86_64-pc-windows-msvc]
+# Static CRT so the plugin exe does not need vcruntime140.dll.
+# /IGNORE:4099 hides missing CRT pdb warnings from the cross linker.
+rustflags = [
+    "-C",
+    "target-feature=+crt-static",
+    "-C",
+    "link-arg=/IGNORE:4099",
+]

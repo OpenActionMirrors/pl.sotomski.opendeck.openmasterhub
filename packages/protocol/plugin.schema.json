@@ -1,0 +1,41 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "OpenMasterHubPluginManifest",
+    "type": "object",
+    "required": ["id", "name", "version", "entrypoint", "runtime", "author"],
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]+(\\.[a-z0-9-]+)+$",
+        "description": "Unique reverse-domain ID (e.g. com.developer.obs-studio)"
+      },
+      "name": {
+        "type": "string",
+        "description": "Human-readable name of the plugin"
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+        "description": "Semantic versioning string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "author": {
+        "type": "string"
+      },
+      "runtime": {
+        "type": "string",
+        "enum": ["node", "python", "binary"],
+        "description": "Execution environment required by the plugin runner"
+      },
+      "entrypoint": {
+        "type": "string",
+        "description": "Relative path to main executable script or binary (e.g., dist/index.js)"
+      },
+      "min_app_version": {
+        "type": "string",
+        "description": "Minimum OpenMasterHub app version required"
+      }
+    }
+  }

@@ -1,0 +1,20 @@
+{
+  "Name": "Unofficial MasterHub Device Support",
+  "Description": "Unofficial MasterHub Device Support. Starts masterhubd when it is not already listening, then registers the device.",
+  "Author": "OpenMasterHub",
+  "Version": "0.1.0",
+  "PluginUUID": "com.openmasterhub.opendeck",
+  "CodePath": "opendeck-masterhub",
+  "CodePathLin": "opendeck-masterhub-linux",
+  "CodePathMac": "opendeck-masterhub",
+  "CodePathWin": "opendeck-masterhub.exe",
+  "Icon": "assets/icon",
+  "Category": "Hardware",
+  "OS": [
+    { "Platform": "linux" },
+    { "Platform": "mac", "MinimumVersion": "11.3" },
+    { "Platform": "windows", "MinimumVersion": "10" }
+  ],
+  "Actions": [],
+  "DeviceNamespace": "mh"
+}

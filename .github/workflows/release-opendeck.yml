@@ -1,0 +1,81 @@
+name: Release OpenDeck plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Require a version tag
+        run: |
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "Run this workflow from a tag that starts with v." >&2
+            exit 1
+          fi
+          case "$GITHUB_REF_NAME" in
+            v*) ;;
+            *)
+              echo "Tag '$GITHUB_REF_NAME' does not start with v." >&2
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+          # cargo-xwin symlinks this component's llvm-ar to llvm-lib. hidapi's
+          # cc build archives the Windows objects with that tool.
+          components: llvm-tools
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/opendeck-masterhub
+
+      - name: Cache the Windows SDK used by cargo-xwin
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/cargo-xwin
+            ~/.cache/xwin
+          key: cargo-xwin-sdk-${{ runner.os }}
+
+      - name: Install clang and zip
+        run: sudo apt-get update && sudo apt-get install -y clang lld zip
+
+      - name: Install cargo-xwin
+        run: cargo install cargo-xwin --locked
+
+      - name: Package the OpenDeck plugin
+        run: sh scripts/package_opendeck_plugin.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: com.openmasterhub.opendeck.sdPlugin
+          path: dist/com.openmasterhub.opendeck.sdPlugin.zip
+          if-no-files-found: error
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          asset="dist/com.openmasterhub.opendeck.sdPlugin.zip"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --clobber
+          else
+            gh release create "$tag" "$asset" \
+              --title "$tag" \
+              --generate-notes \
+              --verify-tag
+          fi

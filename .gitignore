@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+daemons/target/
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+*.tsbuildinfo
+.DS_Store
+plugins/opendeck-masterhub/opendeck-masterhub
+plugins/opendeck-masterhub/opendeck-masterhub.exe
