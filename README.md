@@ -1,56 +1,44 @@
-# OpenMasterHub
+# Unofficial MasterHub plugin for OpenDeck
 
-Cross-platform (macOS, Linux, Windows) driver for the Master Hub, used from OpenDeck.
+This is an unofficial [OpenDeck](https://github.com/nekename/OpenDeck) device plugin for the MasterHub.
 
-When modules are connected, `masterhubd` reads the keys, knobs, rollers, sliders, and the dial, and writes key images, the dial screen, and LED reports over USB. The daemon serves the local WebSocket API on `ws://127.0.0.1:9123`. See [docs/protocol.md](docs/protocol.md). The OpenDeck plugin is described in [docs/plugins.md](docs/plugins.md).
+With the hub plugged in, OpenDeck shows a device named **Master Hub**. Icons you assign in OpenDeck appear on the keys and on the dial screen. Presses, knob turns, and (where they work) roller turns run the actions you set on those controls.
 
-A license has not been chosen.
+It runs on **Linux**, **macOS**, and **Windows**.
 
-## Layout
+## Install
 
-```text
-openmasterhub/
-├── .github/workflows/          # CI
-├── daemons/masterhubd/         # USB HID daemon
-├── plugins/opendeck-masterhub/ # OpenDeck device plugin
-├── sdks/
-│   ├── js/                     # @openmasterhub/sdk
-│   └── python/                 # openmasterhub-sdk
-├── packages/protocol/          # @openmasterhub/protocol
-├── docs/
-├── package.json
-└── pnpm-workspace.yaml
-```
+1. Download `com.openmasterhub.opendeck.sdPlugin.zip` from the [releases](https://github.com/OpenMasterHub/openmasterhub/releases) page.
+2. In OpenDeck, choose **Plugins → Install from file** and select that zip.
+3. Plug in the MasterHub. OpenDeck starts the plugin, and the plugin talks to the hub on its own.
 
-`daemons/Cargo.toml` is the Cargo workspace for `masterhubd`.
+macOS 11.3 or newer. Windows 10 or newer.
 
-## Prerequisites
+### Linux permissions
 
-- Node.js 20+ and pnpm 9
-- Rust stable (1.88+ for the daemon and the OpenDeck plugin)
-- Python 3.11+
+The hub’s USB devices are root-only until a udev rule is installed. The first time the plugin cannot open them, it asks for an administrator password and installs that rule. Approve the prompt. Later starts do not ask again.
 
-## Develop
+If you dismiss the prompt, the keys and knobs stay silent. Unzip the plugin and install the rule bundled at `udev/60-openmasterhub.rules`:
 
 ```sh
-pnpm install
-pnpm typecheck
-cargo build --manifest-path daemons/Cargo.toml
-cargo test --manifest-path plugins/opendeck-masterhub/Cargo.toml
+sudo cp udev/60-openmasterhub.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=hidraw
 ```
 
-## OpenDeck plugin
+Unplug the hub, plug it back in, and restart OpenDeck.
 
-`plugins/opendeck-masterhub` is an OpenDeck device plugin. OpenDeck starts it. If nothing is listening on `ws://127.0.0.1:9123`, the plugin starts `masterhubd` in the same process. A `masterhubd` that is already listening is left running, and the plugin connects to it. While that socket is open, the plugin registers a device named Master Hub (`mh-simulator`). The daemon the plugin started exits with the plugin.
+## Supported
 
-```sh
-pnpm package:opendeck
-```
+| Control | What works |
+| --- | --- |
+| 15 keys (3×5) | Press and release. Icons from OpenDeck are shown on the keys. Key backlight brightness follows OpenDeck’s brightness setting. |
+| 3 knobs | Turn and press. Top knob, then the two knobs under it. |
+| Dial | Turn, press, and the image on the round screen. |
+| 2 rollers | Turn, on Linux and Windows. |
 
-That writes `dist/com.openmasterhub.opendeck.sdPlugin.zip`. Pushing a tag that starts with `v` runs [Release OpenDeck plugin](.github/workflows/release-opendeck.yml), which runs the same script and attaches that zip to the GitHub release for the tag. The zip includes `opendeck-masterhub.exe` for Windows and `opendeck-masterhub-linux` for x86_64 Linux. On macOS, the Windows executable is built with [cargo-xwin](https://github.com/rust-cross/cargo-xwin) (`cargo install cargo-xwin`), and the Linux executable is an x86_64 glibc 2.31 binary built with [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) plus Zig. The script installs Rust's `x86_64-pc-windows-msvc` target with rustup when it is missing, and installs the `llvm-tools` component when `llvm-lib` is not already available. That cross build also needs clang (`sudo apt install clang` on Ubuntu and Pop!_OS). cargo-xwin uses `llvm-ar` from `llvm-tools` as `llvm-lib` to archive the Windows build of hidapi. In OpenDeck, choose Plugins → Install from file and select that zip. The plugin starts `masterhubd` when the socket is closed.
+## Not supported
 
-On Linux, the first plugin start that cannot open the modules asks for an administrator password and installs `udev/60-openmasterhub.rules`. Dismissing that prompt leaves the hidraw nodes root-only, so the modules never enter software mode until the rule is installed by hand.
-
-Install the Python SDK with `python3 -m pip install -e sdks/python`.
-
-See [docs/contributing.md](docs/contributing.md) for checks.
+- **Sliders.** The slider module is ignored. Those controls do not appear in OpenDeck.
+- **RGB.** Knob, slider, and dial LED color is not controlled from OpenDeck.
+- **Rollers on macOS.** The rollers do not work on Mac. Keys, knobs, and the dial still do.
