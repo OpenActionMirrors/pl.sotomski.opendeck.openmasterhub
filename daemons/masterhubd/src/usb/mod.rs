@@ -17,7 +17,9 @@ use hidapi::{HidApi, HidDevice};
 use crate::hub::Hub;
 use crate::protocol::{CommandSink, ControlTarget, ModuleModel, OutputCommand};
 
-use dial::{dial_input, encode_screen, screen_jpeg, software_mode_feature as dial_software_mode, DialInput};
+use dial::{
+    dial_input, encode_screen, screen_jpeg, software_mode_feature as dial_software_mode, DialInput,
+};
 use m0::{
     base_knob_rotated_payload, base_knob_state_payload, encode_led, input_payload, input_report,
     knob_control, knob_led_index, knob_rotated_payload, knob_state_payload, led_index_all,
@@ -25,9 +27,9 @@ use m0::{
     PID_BASE, PID_KNOB, PID_ROLLER, PID_SLIDER,
 };
 use m4315::{
-    button_jpeg_for_device, diff_keys, encode_button_image, key_snapshot_from_report,
-    key_state_payload, released_snapshot, software_mode_feature, KeySnapshot, PID as PID_KEYS,
-    REPORT_LEN, VID,
+    backlight_feature, button_jpeg_for_device, diff_keys, encode_button_image,
+    key_snapshot_from_report, key_state_payload, released_snapshot, software_mode_feature,
+    KeySnapshot, PID as PID_KEYS, REPORT_LEN, VID,
 };
 
 const READ_LEN: usize = 512;
@@ -93,6 +95,30 @@ impl LedQueue {
     }
 }
 
+struct BacklightQueue {
+    latest: Mutex<Option<u8>>,
+}
+
+impl BacklightQueue {
+    fn new() -> Self {
+        Self {
+            latest: Mutex::new(None),
+        }
+    }
+
+    fn store(&self, brightness: u8) {
+        *self.latest.lock().expect("backlight queue") = Some(brightness);
+    }
+
+    fn take(&self) -> Option<u8> {
+        self.latest.lock().expect("backlight queue").take()
+    }
+
+    fn clear(&self) {
+        *self.latest.lock().expect("backlight queue") = None;
+    }
+}
+
 struct ScreenQueue {
     latest: Mutex<Option<Vec<u8>>>,
 }
@@ -119,6 +145,7 @@ impl ScreenQueue {
 
 pub struct UsbSink {
     images: Arc<ImageQueue>,
+    backlight: Arc<BacklightQueue>,
     knob_leds: Arc<LedQueue>,
     slider_leds: Arc<LedQueue>,
     base_leds: Arc<LedQueue>,
@@ -129,6 +156,7 @@ impl UsbSink {
     fn new() -> Arc<Self> {
         Arc::new(Self {
             images: Arc::new(ImageQueue::new()),
+            backlight: Arc::new(BacklightQueue::new()),
             knob_leds: Arc::new(LedQueue::new()),
             slider_leds: Arc::new(LedQueue::new()),
             base_leds: Arc::new(LedQueue::new()),
@@ -262,6 +290,11 @@ impl CommandSink for UsbSink {
             } if module.model == ModuleModel::M4315 => {
                 self.images.store(*control, jpeg.clone());
             }
+            OutputCommand::Backlight { module, brightness }
+                if module.model == ModuleModel::M4315 =>
+            {
+                self.backlight.store(*brightness);
+            }
             OutputCommand::ScreenImage { module, jpeg } if module.model == ModuleModel::M0064 => {
                 self.dial_screen.store(jpeg.clone());
             }
@@ -381,9 +414,7 @@ fn offer_udev_rules() -> bool {
             false
         }
         Err(error) => {
-            eprintln!(
-                "masterhubd: could not ask for permission to install the udev rule: {error}"
-            );
+            eprintln!("masterhubd: could not ask for permission to install the udev rule: {error}");
             false
         }
     }
@@ -421,6 +452,7 @@ fn serve_keys(
     let mut keys = released_snapshot();
     let mut buf = [0u8; READ_LEN];
     loop {
+        drain_backlight(device, &sink.backlight)?;
         drain_images(device, &sink.images)?;
         match device.read_timeout(&mut buf, READ_TIMEOUT_MS) {
             Ok(0) => {}
@@ -433,6 +465,17 @@ fn serve_keys(
             Err(err) => return Err(format!("disconnected: {err}")),
         }
     }
+}
+
+fn drain_backlight(device: &HidDevice, backlight: &BacklightQueue) -> Result<(), String> {
+    let Some(brightness) = backlight.take() else {
+        return Ok(());
+    };
+    if let Err(err) = device.send_feature_report(&backlight_feature(brightness)) {
+        backlight.clear();
+        return Err(format!("backlight failed: {err}"));
+    }
+    Ok(())
 }
 
 fn drain_images(device: &HidDevice, images: &ImageQueue) -> Result<(), String> {
@@ -570,7 +613,10 @@ fn serve_dial(
         } else {
             false
         };
-        if screen.as_ref().is_some_and(|current| current.next == current.reports.len()) {
+        if screen
+            .as_ref()
+            .is_some_and(|current| current.next == current.reports.len())
+        {
             screen = None;
         }
         if wrote {
@@ -817,10 +863,15 @@ mod tests {
             module: module(ModuleModel::M4315),
             brightness: 10,
         });
+        sink.accept(&OutputCommand::Backlight {
+            module: module(ModuleModel::M4315),
+            brightness: 40,
+        });
 
         let pending = sink.images.take();
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[&3], vec![0xff, 0xd8, 0xff]);
+        assert_eq!(sink.backlight.take(), Some(40));
         assert_eq!(sink.dial_screen.take(), Some(vec![0xff, 0xd8, 0x22]));
         assert_eq!(
             sink.knob_leds.take(),

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="inspector.css" />
+  </head>
+  <body>
+    <h1>Brightness</h1>
+    <fieldset>
+      <legend>Brightness</legend>
+      <select id="output">
+        <option value="keypad" selected>Keypad</option>
+        <option value="rgb">RGB</option>
+        <option value="toggle">Toggle after press</option>
+      </select>
+    </fieldset>
+    <label class="slider">
+      <span>Step</span>
+      <input id="step" type="range" min="1" max="100" value="1" />
+      <output id="step-out">1</output>
+    </label>
+    <fieldset id="action-row" class="hidden">
+      <legend>Action</legend>
+      <select id="action">
+        <option value="increase" selected>Increase</option>
+        <option value="decrease">Decrease</option>
+      </select>
+    </fieldset>
+    <p id="dial-note" class="note hidden">The dial screen shows a ring and the percent. Toggle after press also shows Keypad or RGB.</p>
+    <script>
+      const step = document.getElementById("step");
+      const output = document.getElementById("output");
+      const action = document.getElementById("action");
+      const actionRow = document.getElementById("action-row");
+      const dialNote = document.getElementById("dial-note");
+      const DIAL = 5;
+      let socket = null;
+      let context = null;
+      let placement = "encoder";
+      let source = "keypad";
+
+      function controlPlacement(info) {
+        const payload = info.payload ?? {};
+        const controller = payload.controller;
+        const column = payload.coordinates && payload.coordinates.column;
+        if (controller === "Keypad") return "button";
+        if (controller === "Encoder") return column === DIAL ? "dial" : "encoder";
+        const parts = String(info.context ?? "").split(".");
+        if (parts.length >= 3) {
+          const kind = parts[parts.length - 3];
+          const position = Number(parts[parts.length - 2]);
+          if (kind === "Keypad") return "button";
+          if (kind === "Encoder") return position === DIAL ? "dial" : "encoder";
+        }
+        return "encoder";
+      }
+
+      function persist() {
+        document.getElementById("step-out").textContent = step.value;
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        const payload = { step: Number(step.value), output: output.value };
+        if (placement === "button") payload.action = action.value;
+        if (output.value === "toggle") payload.source = source;
+        socket.send(
+          JSON.stringify({
+            event: "setSettings",
+            context,
+            payload,
+          }),
+        );
+      }
+
+      for (const input of [step, output, action]) input.addEventListener("input", persist);
+      output.addEventListener("change", persist);
+      action.addEventListener("change", persist);
+
+      function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+        inActionInfo = JSON.parse(inActionInfo);
+        context = inActionInfo.context;
+        placement = controlPlacement(inActionInfo);
+        actionRow.classList.toggle("hidden", placement !== "button");
+        dialNote.classList.toggle("hidden", placement !== "dial");
+        const settings = inActionInfo.payload.settings ?? {};
+        step.value = settings.step ?? 1;
+        if (settings.output === "keypad" || settings.output === "rgb" || settings.output === "toggle") {
+          output.value = settings.output;
+        }
+        if (settings.source === "keypad" || settings.source === "rgb") source = settings.source;
+        if (settings.action === "increase" || settings.action === "decrease") {
+          action.value = settings.action;
+        }
+        document.getElementById("step-out").textContent = step.value;
+
+        socket = new WebSocket("ws://127.0.0.1:" + inPort);
+        socket.onopen = () => {
+          socket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+          persist();
+        };
+        socket.onmessage = (message) => {
+          const event = JSON.parse(message.data);
+          if (event.event !== "didReceiveSettings") return;
+          const next = event.payload && event.payload.settings;
+          if (!next) return;
+          if (next.source === "keypad" || next.source === "rgb") source = next.source;
+        };
+      }
+    </script>
+  </body>
+</html>

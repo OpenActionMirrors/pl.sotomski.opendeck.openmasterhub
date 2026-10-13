@@ -21,7 +21,21 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=hidraw
 ```
 
-Key images from OpenDeck are sent to `masterhubd` as `set_button_image`. The dial image, encoder 5, is sent as `set_screen_image` for M0064. A key image larger than 72×72 is scaled down. A dial image is fitted inside 240×240 without stretching.
+Key images from OpenDeck are sent to `masterhubd` as `set_button_image`. The dial image, encoder 5, is sent as `set_screen_image` for M0064. A key image larger than 72×72 is scaled down. A dial image is fitted inside 240×240 without stretching. OpenDeck’s device brightness is `set_backlight` on the keypad.
+
+A `setImage` with no image clears that control: a black frame on one key, or on the dial when the control is encoder 5. A profile change sends `setImage` with no controller, position, or image. That clears every key and the dial, and the images for the new profile replace the blank ones. A key or dial that the new profile leaves empty stays blank.
+
+Three plugin actions run on key press and on encoder press. Brightness keeps one shared keypad level and one shared RGB level. It reads `step` (1–100, default 1) from the control that moved. `output` is `keypad`, `rgb`, or `toggle`. A key uses `action` `increase` or `decrease` and moves the selected level by its step. A knob or the dial multiplies each turn tick by its own step. The two levels are shared, so a key does not keep a separate copy that jumps to 0 or 100. Toggle after press stores `source` as `keypad` or `rgb`. A press on a knob or the dial swaps that source. A press on a key changes the current level, then swaps the source. When the action is on the dial, encoder 5, the screen shows a ring filled to the current percent, with that percent in the center, including when the action first appears. In toggle mode the screen also shows Keypad or RGB. OpenDeck's action icon and title are not drawn on that screen. Any later change from a key, a knob, or the dial sends a new `set_screen_image`.
+
+The action list shows a sun for brightness and an RGB ring for the color and mode actions. On a key, the brightness icon adds a plus or a minus for increase or decrease. The color action draws its key in the selected color.
+
+| Action | Settings | Command |
+| --- | --- | --- |
+| Set LED color | `targets`: any of `base`, `top`, `left`, `right`. `h` 0–360, `s` 0–100, `v` 0–100 (HSV). A saved `l` without `v` is still read as HSL | `set_led_color`, after converting HSV to RGB |
+| Set LED mode | same `targets`. `action` is `set`, `toggle`, or `cycle`. `mode`: `static`, `breathing`, `strobe`, `spring`, `cycling`, `random`, `wave`, `water`, `rainbow`, or `disable`. On/off toggle swaps off and solid. Toggle mode steps through the effects, from solid back around to solid, and skips off. Both hide the mode list | `set_led_mode` |
+| Brightness | `output`: `keypad`, `rgb`, or `toggle`. `step` 1–100. On a key, `action` is `increase` or `decrease`. Toggle keeps `source` as `keypad` or `rgb`. Keypad and RGB levels are shared separately | Keypad sends `set_backlight` on the M4315. RGB sends `set_led_brightness` to every knob and the base. A dial also receives `set_screen_image` |
+
+All three knobs in one press become a single M003K command with `control: "all"`. The base is a separate M0064 command on control `0`. A custom color is displayed in static, breathing, strobe, and spring. With no saved settings, the color action targets every LED above and uses red (`h` 0, `s` 100, `v` 100). The mode action uses solid (`static`) when its action is set. On/off toggle remembers the last of off or solid that it sent; a new on/off key starts from off, so the first press turns the lights solid. Toggle mode remembers the last effect it sent and applies the next one; a new key starts at solid. Brightness starts at keypad and uses 100 for both levels. A new toggle-after-press control starts on keypad, so the first press selects RGB.
 
 ```sh
 pnpm package:opendeck

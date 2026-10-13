@@ -170,7 +170,7 @@ M4315 module screen. Same channels, no `control`.
 
 ### `set_backlight`
 
-M4315 backlight. `brightness` is an integer `0..100`.
+M4315 backlight. `brightness` is an integer `0..100`. A connected M4315 receives this as the keypad backlight.
 
 ```json
 {

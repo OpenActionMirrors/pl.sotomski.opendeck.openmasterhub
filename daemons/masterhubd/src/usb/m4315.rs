@@ -34,6 +34,18 @@ pub fn released_snapshot() -> KeySnapshot {
     [false; KEY_COUNT]
 }
 
+/// Feature report that sets the keypad backlight.
+///
+/// Report id `0x03`, command `0x34`, brightness at byte 2. `brightness` is
+/// `0..=100`. Layout: `cooltek-sdk-probe` `adjust_backlight_cm_m4315`.
+pub fn backlight_feature(brightness: u8) -> [u8; 0x20] {
+    let mut report = [0u8; 0x20];
+    report[0] = 0x03;
+    report[1] = 0x34;
+    report[2] = brightness.min(100);
+    report
+}
+
 /// Feature report that switches the module into software mode.
 ///
 /// Report id `0x03`, feature `0x3a`, mode `0x01`. The module ignores input and
@@ -269,5 +281,13 @@ mod tests {
         let report = software_mode_feature();
         assert_eq!(&report[..3], &[0x03, 0x3a, 0x01]);
         assert!(report[3..].iter().all(|byte| *byte == 0));
+    }
+
+    #[test]
+    fn backlight_feature_sets_command_0x34() {
+        let report = backlight_feature(100);
+        assert_eq!(&report[..3], &[0x03, 0x34, 100]);
+        assert!(report[3..].iter().all(|byte| *byte == 0));
+        assert_eq!(backlight_feature(255)[2], 100);
     }
 }

@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use serde_json::Value;
@@ -11,14 +13,14 @@ pub const COLUMNS: u8 = 5;
 pub const ENCODERS: u8 = 6;
 pub const DEVICE_TYPE: u8 = 0;
 
-const KEYS: &str = "keys";
-const KNOBS: &str = "knobs";
+pub(crate) const KEYS: &str = "keys";
+pub(crate) const KNOBS: &str = "knobs";
 const ROLLERS: &str = "rollers";
 
 const ROLLER_ENCODER: u8 = 3;
-const BIG_KNOB_ENCODER: u8 = 5;
+pub(crate) const BIG_KNOB_ENCODER: u8 = 5;
 
-const BASE: &str = "base";
+pub(crate) const BASE: &str = "base";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceEvent {
@@ -108,20 +110,65 @@ pub fn image_command(
     controller: Option<&str>,
     position: Option<u8>,
     image: Option<&str>,
-) -> Option<String> {
+) -> Vec<String> {
     if device != DEVICE_ID {
-        return None;
+        return Vec::new();
     }
-    let jpeg = jpeg_base64_from_data_url(image?)?;
+    let Some(image) = image else {
+        return clear_commands(controller, position);
+    };
+    let Some(jpeg) = jpeg_base64_from_data_url(image) else {
+        return Vec::new();
+    };
     if controller == Some("Encoder") {
         if position == Some(BIG_KNOB_ENCODER) {
-            return Some(screen_image_command(&jpeg));
+            return vec![screen_image_command(&jpeg)];
         }
-        return None;
+        return Vec::new();
     }
-    let position = position.filter(|position| *position < 15)?;
-    Some(button_image_command(position, &jpeg))
+    let Some(position) = position.filter(|position| *position < ROWS * COLUMNS) else {
+        return Vec::new();
+    };
+    vec![button_image_command(position, &jpeg)]
 }
+
+/// OpenDeck sends `setImage` with no image to blank a control. A profile
+/// change sends that event with no controller and no position, which blanks
+/// every key and the dial before the new profile's images arrive.
+fn clear_commands(controller: Option<&str>, position: Option<u8>) -> Vec<String> {
+    match (controller, position) {
+        (None, None) => {
+            let mut commands = (0..ROWS * COLUMNS)
+                .map(|control| button_image_command(control, &BLANK_KEY_JPEG))
+                .collect::<Vec<_>>();
+            commands.push(screen_image_command(&BLANK_DIAL_JPEG));
+            commands
+        }
+        (Some("Encoder"), Some(BIG_KNOB_ENCODER)) => {
+            vec![screen_image_command(&BLANK_DIAL_JPEG)]
+        }
+        (Some("Encoder"), _) => Vec::new(),
+        (_, Some(position)) if position < ROWS * COLUMNS => {
+            vec![button_image_command(position, &BLANK_KEY_JPEG)]
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn solid_jpeg(edge: u32) -> String {
+    let image = image::RgbImage::from_pixel(edge, edge, image::Rgb([0, 0, 0]));
+    let mut encoded = Vec::new();
+    image::DynamicImage::ImageRgb8(image)
+        .write_to(
+            &mut std::io::Cursor::new(&mut encoded),
+            image::ImageFormat::Jpeg,
+        )
+        .expect("black jpeg");
+    STANDARD.encode(encoded)
+}
+
+static BLANK_KEY_JPEG: LazyLock<String> = LazyLock::new(|| solid_jpeg(72));
+static BLANK_DIAL_JPEG: LazyLock<String> = LazyLock::new(|| solid_jpeg(240));
 
 fn screen_image_command(data_base64: &str) -> String {
     serde_json::json!({
@@ -507,15 +554,13 @@ mod tests {
 
     #[test]
     fn image_command_skips_encoders_and_converts_png() {
-        assert_eq!(
-            image_command(
-                DEVICE_ID,
-                Some("Encoder"),
-                Some(0),
-                Some("data:image/png;base64,xx")
-            ),
-            None
-        );
+        assert!(image_command(
+            DEVICE_ID,
+            Some("Encoder"),
+            Some(0),
+            Some("data:image/png;base64,xx")
+        )
+        .is_empty());
         let png = image::RgbaImage::from_pixel(1, 1, image::Rgba([1, 2, 3, 255]));
         let mut bytes = Vec::new();
         png.write_to(
@@ -524,18 +569,59 @@ mod tests {
         )
         .unwrap();
         let data_url = format!("data:image/png;base64,{}", STANDARD.encode(bytes));
-        let command = image_command(DEVICE_ID, Some("Keypad"), Some(0), Some(&data_url)).unwrap();
-        let value: Value = serde_json::from_str(&command).unwrap();
+        let command = image_command(DEVICE_ID, Some("Keypad"), Some(0), Some(&data_url));
+        assert_eq!(command.len(), 1);
+        let value: Value = serde_json::from_str(&command[0]).unwrap();
         assert_eq!(value["action"], "set_button_image");
         assert_eq!(value["payload"]["control"], 0);
-        let screen = image_command(DEVICE_ID, Some("Encoder"), Some(5), Some(&data_url)).unwrap();
-        let screen: Value = serde_json::from_str(&screen).unwrap();
+        let screen = image_command(DEVICE_ID, Some("Encoder"), Some(5), Some(&data_url));
+        assert_eq!(screen.len(), 1);
+        let screen: Value = serde_json::from_str(&screen[0]).unwrap();
         assert_eq!(screen["action"], "set_screen_image");
         assert_eq!(screen["payload"]["module"]["model"], "M0064");
         let jpeg = STANDARD
             .decode(value["payload"]["data_base64"].as_str().unwrap())
             .unwrap();
         assert!(jpeg.starts_with(&[0xFF, 0xD8]));
+    }
+
+    #[test]
+    fn missing_image_blanks_the_control_or_the_whole_device() {
+        let key = image_command(DEVICE_ID, Some("Keypad"), Some(4), None);
+        assert_eq!(key.len(), 1);
+        let key: Value = serde_json::from_str(&key[0]).unwrap();
+        assert_eq!(key["action"], "set_button_image");
+        assert_eq!(key["payload"]["control"], 4);
+        assert_eq!(decoded_size(&key), (72, 72));
+
+        let dial = image_command(DEVICE_ID, Some("Encoder"), Some(BIG_KNOB_ENCODER), None);
+        assert_eq!(dial.len(), 1);
+        let dial: Value = serde_json::from_str(&dial[0]).unwrap();
+        assert_eq!(dial["action"], "set_screen_image");
+        assert_eq!(decoded_size(&dial), (240, 240));
+
+        assert!(image_command(DEVICE_ID, Some("Encoder"), Some(0), None).is_empty());
+        assert!(image_command("sd-other", None, None, None).is_empty());
+
+        let cleared = image_command(DEVICE_ID, None, None, None);
+        assert_eq!(cleared.len(), 16);
+        for (control, command) in cleared.iter().take(15).enumerate() {
+            let value: Value = serde_json::from_str(command).unwrap();
+            assert_eq!(value["action"], "set_button_image");
+            assert_eq!(value["payload"]["control"], control as u64);
+            assert_eq!(decoded_size(&value), (72, 72));
+        }
+        let screen: Value = serde_json::from_str(cleared.last().unwrap()).unwrap();
+        assert_eq!(screen["action"], "set_screen_image");
+        assert_eq!(decoded_size(&screen), (240, 240));
+    }
+
+    fn decoded_size(command: &Value) -> (u32, u32) {
+        let jpeg = STANDARD
+            .decode(command["payload"]["data_base64"].as_str().unwrap())
+            .unwrap();
+        let image = image::load_from_memory(&jpeg).unwrap();
+        (image.width(), image.height())
     }
 
     #[test]

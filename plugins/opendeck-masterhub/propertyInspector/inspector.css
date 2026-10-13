@@ -1,0 +1,118 @@
+html,
+body {
+  margin: 0;
+  background: #2d2d2d;
+  color: #d8d8d8;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+body {
+  padding: 12px 14px 16px;
+}
+
+h1 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+fieldset {
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+
+legend {
+  margin-bottom: 6px;
+  color: #9a9a9a;
+  font-size: 12px;
+}
+
+.targets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+}
+
+.targets label,
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slider {
+  margin-top: 8px;
+}
+
+.slider span:first-child {
+  width: 88px;
+  color: #9a9a9a;
+}
+
+.slider input[type="range"] {
+  flex: 1;
+}
+
+.slider output {
+  width: 72px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="color"] {
+  width: 100%;
+  height: 36px;
+  margin: 0 0 4px;
+  padding: 0;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.spectrum {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 10px;
+  border-radius: 5px;
+  background: #3d3d3d;
+  outline: none;
+}
+
+#h.spectrum {
+  background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+
+.spectrum::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 50%;
+  background: #f2f2f2;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.hidden {
+  display: none;
+}
+
+.note {
+  margin: 12px 0 0;
+  color: #9a9a9a;
+  line-height: 1.4;
+}
+
+select {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  color: #d8d8d8;
+  background: #3d3d3d;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  font: inherit;
+}

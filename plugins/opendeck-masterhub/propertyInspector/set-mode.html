@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="inspector.css" />
+  </head>
+  <body>
+    <h1>Set LED mode</h1>
+    <fieldset>
+      <legend>Action</legend>
+      <select id="action">
+        <option value="set" selected>Set</option>
+        <option value="toggle">On/off toggle</option>
+        <option value="cycle">Toggle mode</option>
+      </select>
+    </fieldset>
+    <fieldset>
+      <legend>Target</legend>
+      <div class="targets">
+        <label><input type="checkbox" name="target" value="base" checked /> Base</label>
+        <label><input type="checkbox" name="target" value="top" checked /> Top knob</label>
+        <label><input type="checkbox" name="target" value="left" checked /> Left knob</label>
+        <label><input type="checkbox" name="target" value="right" checked /> Right knob</label>
+      </div>
+    </fieldset>
+    <fieldset id="mode-row">
+      <legend>Mode</legend>
+      <select id="mode">
+        <option value="static" selected>Solid</option>
+        <option value="breathing">Breathing</option>
+        <option value="strobe">Strobe</option>
+        <option value="spring">Spring</option>
+        <option value="cycling">Cycling</option>
+        <option value="random">Random</option>
+        <option value="wave">Wave</option>
+        <option value="water">Water</option>
+        <option value="rainbow">Rainbow</option>
+        <option value="disable">Off</option>
+      </select>
+    </fieldset>
+    <script>
+      const boxes = [...document.querySelectorAll('input[name="target"]')];
+      const action = document.getElementById("action");
+      const mode = document.getElementById("mode");
+      const modeRow = document.getElementById("mode-row");
+      let socket = null;
+      let context = null;
+      let setMode = "static";
+
+      function syncAction() {
+        modeRow.classList.toggle("hidden", action.value !== "set");
+      }
+
+      function persist() {
+        syncAction();
+        if (!socket || socket.readyState !== WebSocket.OPEN) return;
+        socket.send(
+          JSON.stringify({
+            event: "setSettings",
+            context,
+            payload: {
+              targets: boxes.filter((box) => box.checked).map((box) => box.value),
+              action: action.value,
+              mode: mode.value,
+            },
+          }),
+        );
+      }
+
+      function onActionChange() {
+        if (action.value === "toggle") {
+          if (mode.value !== "disable") setMode = mode.value;
+          mode.value = "disable";
+        } else if (action.value === "cycle") {
+          if (mode.value !== "disable") setMode = mode.value;
+        } else {
+          mode.value = setMode;
+        }
+        persist();
+      }
+
+      for (const input of boxes) input.addEventListener("input", persist);
+      mode.addEventListener("change", persist);
+      action.addEventListener("change", onActionChange);
+      syncAction();
+
+      function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+        inActionInfo = JSON.parse(inActionInfo);
+        context = inActionInfo.context;
+        const settings = inActionInfo.payload.settings ?? {};
+        const targets = Array.isArray(settings.targets)
+          ? settings.targets
+          : ["base", "top", "left", "right"];
+        for (const box of boxes) box.checked = targets.includes(box.value);
+        if (settings.action === "set" || settings.action === "toggle" || settings.action === "cycle") {
+          action.value = settings.action;
+        }
+        if ([...mode.options].some((option) => option.value === settings.mode)) {
+          mode.value = settings.mode;
+        }
+        if (action.value === "set" || action.value === "cycle") setMode = mode.value;
+        syncAction();
+
+        socket = new WebSocket("ws://127.0.0.1:" + inPort);
+        socket.onopen = () => {
+          socket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+          persist();
+        };
+        socket.onmessage = (message) => {
+          const event = JSON.parse(message.data);
+          if (event.event !== "didReceiveSettings") return;
+          const next = event.payload && event.payload.settings;
+          if (!next || ![...mode.options].some((option) => option.value === next.mode)) return;
+          mode.value = next.mode;
+        };
+      }
+    </script>
+  </body>
+</html>

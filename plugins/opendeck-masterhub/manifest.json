@@ -9,12 +9,48 @@
   "CodePathMac": "opendeck-masterhub",
   "CodePathWin": "opendeck-masterhub.exe",
   "Icon": "assets/icon",
-  "Category": "Hardware",
+  "Category": "OpenMasterHub",
   "OS": [
     { "Platform": "linux" },
     { "Platform": "mac", "MinimumVersion": "11.3" },
     { "Platform": "windows", "MinimumVersion": "10" }
   ],
-  "Actions": [],
+  "Actions": [
+    {
+      "Icon": "assets/rgb",
+      "Name": "RGB color",
+      "UUID": "com.openmasterhub.opendeck.rgbcolor",
+      "Tooltip": "Set the color of the base and knobs",
+      "PropertyInspectorPath": "propertyInspector/set-color.html",
+      "Controllers": ["Keypad", "Encoder"],
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "assets/color" }]
+    },
+    {
+      "Icon": "assets/rgb",
+      "Name": "RGB mode",
+      "UUID": "com.openmasterhub.opendeck.rgbmode",
+      "Tooltip": "Set a light mode, switch it on and off, or step through the modes",
+      "PropertyInspectorPath": "propertyInspector/set-mode.html",
+      "Controllers": ["Keypad", "Encoder"],
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "assets/rgb" }]
+    },
+    {
+      "Icon": "assets/brightness",
+      "Name": "Brightness",
+      "UUID": "com.openmasterhub.opendeck.setbrightness",
+      "Tooltip": "Change the keypad backlight or the RGB brightness",
+      "PropertyInspectorPath": "propertyInspector/set-brightness.html",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "TriggerDescription": {
+          "Rotate": "Change the brightness by the step"
+        }
+      },
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "assets/brightness" }]
+    }
+  ],
   "DeviceNamespace": "mh"
 }

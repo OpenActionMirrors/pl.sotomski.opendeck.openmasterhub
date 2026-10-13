@@ -37,8 +37,15 @@ Unplug the hub, plug it back in, and restart OpenDeck.
 | Dial | Turn, press, and the image on the round screen. |
 | 2 rollers | Turn, on Linux and Windows. |
 
+## Actions
+
+**Set LED color.** Choose any combination of the base, the top knob, the left knob, and the right knob. The color is hue, saturation, and brightness, or the color picker. A press applies that color. It shows in solid, breathing, strobe, and spring. The key shows the selected color.
+
+**Set LED mode.** The same targets. Set applies one mode: solid, breathing, strobe, spring, cycling, random, wave, water, rainbow, or off. On/off toggle swaps between off and solid. Toggle mode steps through those effects, from solid through rainbow and back to solid. A new on/off key turns the lights solid on the first press. A new toggle-mode key starts at solid.
+
+**Brightness.** Choose the keypad backlight, the RGB lights, or toggle after press. On a key, choose increase or decrease and a step. The key shows a sun with a plus or a minus. On a knob, the step is how far one detent moves the selected brightness. Toggle after press switches a knob or the dial between keypad and RGB; a key changes the current one and then switches. On the dial, the screen shows a ring and the percent as soon as the action is placed there, and Keypad or RGB after a toggle. Keys, knobs, and the dial share one keypad level and one RGB level, and a dial that is showing that light follows a change from any of them.
+
 ## Not supported
 
-- **Sliders.** The slider module is ignored. Those controls do not appear in OpenDeck.
-- **RGB.** Knob, slider, and dial LED color is not controlled from OpenDeck.
+- **Sliders.** The slider module is ignored. Those controls do not appear in OpenDeck, and their LEDs are not controlled.
 - **Rollers on macOS.** The rollers do not work on Mac. Keys, knobs, and the dial still do.

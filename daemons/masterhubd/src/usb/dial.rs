@@ -154,7 +154,10 @@ mod tests {
         let wide = image::RgbImage::from_pixel(200, 100, image::Rgb([220, 20, 20]));
         let mut encoded = Vec::new();
         image::DynamicImage::ImageRgb8(wide)
-            .write_to(&mut std::io::Cursor::new(&mut encoded), image::ImageFormat::Jpeg)
+            .write_to(
+                &mut std::io::Cursor::new(&mut encoded),
+                image::ImageFormat::Jpeg,
+            )
             .unwrap();
         let fitted = screen_jpeg(&encoded).unwrap();
         let decoded = image::load_from_memory_with_format(&fitted, image::ImageFormat::Jpeg)

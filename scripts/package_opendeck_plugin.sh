@@ -93,6 +93,7 @@ rm -rf "$stage"
 mkdir -p "$stage"
 cp "$root/plugins/opendeck-masterhub/manifest.json" "$stage/manifest.json"
 cp -R "$root/plugins/opendeck-masterhub/assets" "$stage/assets"
+cp -R "$root/plugins/opendeck-masterhub/propertyInspector" "$stage/propertyInspector"
 mkdir -p "$stage/udev"
 cp "$root/udev/60-openmasterhub.rules" "$stage/udev/60-openmasterhub.rules"
 

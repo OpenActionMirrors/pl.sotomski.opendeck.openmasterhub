@@ -83,7 +83,7 @@ async fn plugin_starts_masterhubd_when_nothing_is_listening() {
     let register = next_message(&mut host_inbox).await;
     assert_eq!(register["event"], "registerPlugin");
 
-    let device = next_message(&mut host_inbox).await;
+    let device = next_message_except(&mut host_inbox, "getGlobalSettings").await;
     assert_eq!(device["event"], "registerDevice");
     assert_eq!(device["payload"]["id"], "mh-simulator");
 
@@ -128,7 +128,7 @@ async fn key_press_and_image_round_trip() {
     assert_eq!(register["event"], "registerPlugin");
     assert_eq!(register["uuid"], "com.openmasterhub.opendeck");
 
-    let device = next_message(&mut host_inbox).await;
+    let device = next_message_except(&mut host_inbox, "getGlobalSettings").await;
     assert_eq!(device["event"], "registerDevice");
     assert_eq!(device["payload"]["id"], "mh-simulator");
     assert_eq!(device["payload"]["rows"], 3);
@@ -182,6 +182,26 @@ async fn key_press_and_image_round_trip() {
         .unwrap();
     assert!(jpeg.starts_with(&[0xFF, 0xD8]));
 
+    to_plugin
+        .send(
+            r#"{"event":"setImage","device":"mh-simulator","controller":null,"position":null,"image":null}"#
+                .to_string(),
+        )
+        .unwrap();
+    let mut cleared = Vec::new();
+    for _ in 0..15 {
+        cleared.push(next_event(&mut deck, "set_button_image").await);
+    }
+    cleared.sort_by_key(|event| event["payload"]["control"].as_u64().unwrap());
+    for (control, event) in cleared.iter().enumerate() {
+        assert_eq!(event["payload"]["control"], control as u64);
+        let bytes = STANDARD
+            .decode(event["payload"]["data_base64"].as_str().unwrap())
+            .unwrap();
+        let image = image::load_from_memory(&bytes).unwrap();
+        assert_eq!((image.width(), image.height()), (72, 72));
+    }
+
     let _ = plugin.kill().await;
 }
 
@@ -192,6 +212,15 @@ fn tiny_jpeg_data_url() -> String {
         .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Jpeg)
         .unwrap();
     format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes))
+}
+
+async fn next_message_except(inbox: &mut mpsc::UnboundedReceiver<Value>, skipped: &str) -> Value {
+    loop {
+        let message = next_message(inbox).await;
+        if message["event"] != skipped {
+            return message;
+        }
+    }
 }
 
 async fn next_message(inbox: &mut mpsc::UnboundedReceiver<Value>) -> Value {
