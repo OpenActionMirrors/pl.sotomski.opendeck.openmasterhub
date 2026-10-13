@@ -81,16 +81,15 @@ async fn session() -> Result<(), anyhow::Error> {
         }
     });
 
-    let mut registered = false;
+    let mut shown: Option<map::ConnectedModules> = None;
+    let mut slider_levels = [None; 5];
     let result = async {
         let hello = next_text(&mut read).await?;
         let hello: serde_json::Value = serde_json::from_str(&hello)?;
         if hello["type"] != "hello" {
             anyhow::bail!("expected masterhubd hello");
         }
-        register_device().await?;
-        registered = true;
-        log::info!("registered {DEVICE_ID}");
+        sync_modules(&mut shown, map::ConnectedModules::from_report(&hello)).await?;
 
         while let Some(incoming) = read.next().await {
             match incoming {
@@ -98,8 +97,30 @@ async fn session() -> Result<(), anyhow::Error> {
                     let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
                         continue;
                     };
+                    if value["type"] == "event" && value["action"] == "modules" {
+                        slider_levels = [None; 5];
+                        sync_modules(
+                            &mut shown,
+                            map::ConnectedModules::from_report(&value["payload"]),
+                        )
+                        .await?;
+                        continue;
+                    }
                     if let Some(event) = map::map_event(&value) {
-                        forward(event).await?;
+                        match event {
+                            map::DeviceEvent::SliderMoved { control, value } => {
+                                let previous = slider_levels[usize::from(control)];
+                                slider_levels[usize::from(control)] = Some(value);
+                                if let Some(ticks) = map::slider_delta(previous, value) {
+                                    forward(map::DeviceEvent::EncoderChange {
+                                        position: map::SLIDER_ENCODER + control,
+                                        ticks,
+                                    })
+                                    .await?;
+                                }
+                            }
+                            other => forward(other).await?,
+                        }
                     }
                 }
                 Ok(Message::Ping(_) | Message::Pong(_)) => {}
@@ -113,10 +134,30 @@ async fn session() -> Result<(), anyhow::Error> {
 
     let _ = COMMANDS.lock().await.take();
     writer.abort();
-    if registered {
+    if shown.is_some() {
         deregister_device().await;
     }
     result
+}
+
+async fn sync_modules(
+    shown: &mut Option<map::ConnectedModules>,
+    next: map::ConnectedModules,
+) -> Result<(), anyhow::Error> {
+    if !next.visible() {
+        if shown.is_some() {
+            deregister_device().await;
+            *shown = None;
+        }
+        return Ok(());
+    }
+    if *shown == Some(next) {
+        return Ok(());
+    }
+    register_device(next).await?;
+    *shown = Some(next);
+    log::info!("registered {DEVICE_ID}");
+    Ok(())
 }
 
 async fn next_text<S>(read: &mut S) -> Result<String, anyhow::Error>
@@ -134,12 +175,14 @@ where
     }
 }
 
-async fn register_device() -> Result<(), anyhow::Error> {
+async fn register_device(modules: map::ConnectedModules) -> Result<(), anyhow::Error> {
     let mut guard = openaction::OUTBOUND_EVENT_MANAGER.lock().await;
     let Some(outbound) = guard.as_mut() else {
         anyhow::bail!("OpenDeck connection is not ready");
     };
-    outbound.send_event(map::registration_event()).await?;
+    outbound
+        .send_event(map::registration_event(modules))
+        .await?;
     Ok(())
 }
 
@@ -178,6 +221,7 @@ async fn forward(event: map::DeviceEvent) -> Result<(), anyhow::Error> {
                 }))
                 .await?
         }
+        map::DeviceEvent::SliderMoved { .. } => {}
     }
     Ok(())
 }

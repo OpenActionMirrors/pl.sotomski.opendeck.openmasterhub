@@ -1,7 +1,7 @@
 {
   "name": "@openmasterhub/protocol",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "TypeScript types for the OpenMasterHub local WebSocket API",
   "exports": {

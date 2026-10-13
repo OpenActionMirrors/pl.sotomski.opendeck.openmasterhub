@@ -554,6 +554,8 @@ pub struct DialFrame {
 }
 
 pub struct BrightnessChange {
+    /// Asserted in tests. The running plugin writes this value into settings.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub level: u8,
     pub source_settings: Value,
     /// Other dial instances whose saved level for this light must follow `level`.

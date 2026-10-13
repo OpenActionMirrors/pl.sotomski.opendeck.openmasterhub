@@ -83,14 +83,13 @@ async fn plugin_starts_masterhubd_when_nothing_is_listening() {
     let register = next_message(&mut host_inbox).await;
     assert_eq!(register["event"], "registerPlugin");
 
-    let device = next_message_except(&mut host_inbox, "getGlobalSettings").await;
-    assert_eq!(device["event"], "registerDevice");
-    assert_eq!(device["payload"]["id"], "mh-simulator");
-
-    let (mut deck, _) = connect_async(format!("ws://{hub_addr}")).await.unwrap();
+    let mut deck = connect_hub(hub_addr).await;
     let hello: Value = serde_json::from_str(&next_text(&mut deck).await).unwrap();
     assert_eq!(hello["type"], "hello");
     assert_eq!(hello["daemon"], "masterhubd");
+    assert_eq!(hello["usb"], false);
+    assert_eq!(hello["modules"], serde_json::json!([]));
+    assert_no_registration(&mut host_inbox).await;
     drop(deck);
 
     let _ = plugin.kill().await;
@@ -128,49 +127,36 @@ async fn key_press_and_image_round_trip() {
     assert_eq!(register["event"], "registerPlugin");
     assert_eq!(register["uuid"], "com.openmasterhub.opendeck");
 
-    let device = next_message_except(&mut host_inbox, "getGlobalSettings").await;
-    assert_eq!(device["event"], "registerDevice");
-    assert_eq!(device["payload"]["id"], "mh-simulator");
-    assert_eq!(device["payload"]["rows"], 3);
-    assert_eq!(device["payload"]["columns"], 5);
-    assert_eq!(device["payload"]["encoders"], 6);
-    assert_eq!(device["payload"]["layoutVersion"], 1);
-    assert_eq!(
-        device["payload"]["layout"]["controls"]
-            .as_array()
-            .unwrap()
-            .len(),
-        21
-    );
-    assert_eq!(device["payload"]["encoder"][5]["type"], "rotary");
-    assert_eq!(device["payload"]["encoder"][5]["is_absolute"], false);
-    assert!(device["payload"]["encoder"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|encoder| encoder["type"] != "slider"));
-
     let (mut deck, _) = connect_async(format!("ws://{hub_addr}")).await.unwrap();
     let hello: Value = serde_json::from_str(&next_text(&mut deck).await).unwrap();
     assert_eq!(hello["type"], "hello");
+    assert_eq!(hello["modules"], serde_json::json!([]));
 
-    deck.send(Message::Text(
-        r#"{"v":1,"type":"trigger","action":"key_state","payload":{"module":{"model":"M4315","id":"keys"},"control":0,"pressed":true}}"#
-            .to_string()
-            .into(),
-    ))
+    let trigger = r#"{"v":1,"type":"trigger","action":"key_state","payload":{"module":{"model":"M4315","id":"keys"},"control":0,"pressed":true}}"#;
+    let key_down = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            deck.send(Message::Text(trigger.to_string().into()))
+                .await
+                .unwrap();
+            match tokio::time::timeout(Duration::from_millis(200), host_inbox.recv()).await {
+                Ok(Some(message)) if message["event"] == "getGlobalSettings" => continue,
+                Ok(Some(message)) => break message,
+                Ok(None) => panic!("plugin closed the OpenDeck socket"),
+                Err(_) => continue,
+            }
+        }
+    })
     .await
-    .unwrap();
-
-    let key_down = next_message(&mut host_inbox).await;
+    .expect("timed out waiting for keyDown");
+    assert_ne!(key_down["event"], "registerDevice");
     assert_eq!(key_down["event"], "keyDown");
-    assert_eq!(key_down["payload"]["device"], "mh-simulator");
+    assert_eq!(key_down["payload"]["device"], "masterhub");
     assert_eq!(key_down["payload"]["position"], 0);
 
     let image = tiny_jpeg_data_url();
     to_plugin
         .send(format!(
-            r#"{{"event":"setImage","device":"mh-simulator","controller":"Keypad","position":0,"image":"{image}"}}"#
+            r#"{{"event":"setImage","device":"masterhub","controller":"Keypad","position":0,"image":"{image}"}}"#
         ))
         .unwrap();
 
@@ -184,7 +170,7 @@ async fn key_press_and_image_round_trip() {
 
     to_plugin
         .send(
-            r#"{"event":"setImage","device":"mh-simulator","controller":null,"position":null,"image":null}"#
+            r#"{"event":"setImage","device":"masterhub","controller":null,"position":null,"image":null}"#
                 .to_string(),
         )
         .unwrap();
@@ -214,13 +200,40 @@ fn tiny_jpeg_data_url() -> String {
     format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes))
 }
 
-async fn next_message_except(inbox: &mut mpsc::UnboundedReceiver<Value>, skipped: &str) -> Value {
-    loop {
-        let message = next_message(inbox).await;
-        if message["event"] != skipped {
-            return message;
+/// The plugin reads hello and decides not to register before this returns.
+async fn assert_no_registration(inbox: &mut mpsc::UnboundedReceiver<Value>) {
+    let quiet = tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            let message = inbox
+                .recv()
+                .await
+                .expect("plugin closed the OpenDeck socket");
+            assert_ne!(
+                message["event"], "registerDevice",
+                "registered a device when no module is open"
+            );
         }
+    })
+    .await;
+    assert!(
+        quiet.is_err(),
+        "plugin inbox closed while checking registration"
+    );
+}
+
+async fn connect_hub(
+    addr: SocketAddr,
+) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+    let url = format!("ws://{addr}");
+    for _ in 0..50 {
+        if let Ok(Ok((socket, _))) =
+            tokio::time::timeout(Duration::from_millis(200), connect_async(&url)).await
+        {
+            return socket;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
+    panic!("masterhubd did not accept a connection");
 }
 
 async fn next_message(inbox: &mut mpsc::UnboundedReceiver<Value>) -> Value {

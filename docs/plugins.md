@@ -1,6 +1,6 @@
 # OpenDeck
 
-`plugins/opendeck-masterhub` is the device plugin. OpenDeck starts it. If nothing is listening on `ws://127.0.0.1:9123` (`MASTERHUBD_LISTEN`), the plugin starts `masterhubd` in the same process. A `masterhubd` that is already listening is left running, and the plugin connects to it. While that socket is open, the plugin registers a device named Master Hub (`mh-simulator`). The daemon the plugin started exits with the plugin. Set `MASTERHUBD_DEBUG=1` in the environment before starting OpenDeck to print each published action on that process’s stderr.
+`plugins/opendeck-masterhub` is the device plugin. OpenDeck starts it. If nothing is listening on `ws://127.0.0.1:9123` (`MASTERHUBD_LISTEN`), the plugin starts `masterhubd` in the same process. A `masterhubd` that is already listening is left running, and the plugin connects to it. While that socket is open, the plugin registers a device named Master Hub (`masterhub`) when a module with controls is connected: the keypad, the knobs, the rollers, the sliders, or the dial. The canvas contains only those modules. Plugging or unplugging one sends `registerDevice` again, or `deregisterDevice` when none of them remain. OpenDeck matches a device id by its first two letters, so the manifest namespace is `ma`. The base does not add controls. When the daemon reports a pogo site, the canvas is the base grid and each module sits on that site, so an empty site stays empty. Without a site, the modules stack as keys, rollers, sliders, then the knobs beside the dial. The daemon the plugin started exits with the plugin. Set `MASTERHUBD_DEBUG=1` in the environment before starting OpenDeck to print each published action on that process’s stderr.
 
 Hardware events from the daemon become OpenDeck key and encoder events:
 
@@ -10,8 +10,9 @@ Hardware events from the daemon become OpenDeck key and encoder events:
 | M003K `knob_rotated` / `knob_state` | encoders 0–2 (top, bottom-left, bottom-right) |
 | M032LE `roller_rotated` | encoders 3–4 (left, right) |
 | M0064 `knob_rotated` / `knob_state`, control 0 | encoder 5, the dial |
+| M005S `slider_moved` | encoders 6–10, left to right |
 
-The M005S 5× slider module is not registered. OpenDeck does not handle it, so `slider_moved` is ignored and the sliders do not appear on the device.
+A slider move is the change in its 0–100 position. The first reading after the module connects sets that position and does not turn the encoder. OpenDeck has no slider control, so the five faders are drawn as encoders. The site for each module is the table in [base-usb-ports.md](base-usb-ports.md).
 
 On Linux the modules show up as root-only hidraw nodes. The first time the plugin starts and cannot open them, it asks for an administrator password and installs `udev/60-openmasterhub.rules`. Later starts do not ask once that rule is in place. If you dismiss the prompt, install it yourself:
 

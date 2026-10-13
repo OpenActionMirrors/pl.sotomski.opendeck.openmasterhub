@@ -2,7 +2,7 @@
   "Name": "Unofficial MasterHub Device Support",
   "Description": "Unofficial MasterHub Device Support. Starts masterhubd when it is not already listening, then registers the device.",
   "Author": "OpenMasterHub",
-  "Version": "0.1.0",
+  "Version": "0.2.0",
   "PluginUUID": "com.openmasterhub.opendeck",
   "CodePath": "opendeck-masterhub",
   "CodePathLin": "opendeck-masterhub-linux",
@@ -52,5 +52,5 @@
       "States": [{ "Image": "assets/brightness" }]
     }
   ],
-  "DeviceNamespace": "mh"
+  "DeviceNamespace": "ma"
 }

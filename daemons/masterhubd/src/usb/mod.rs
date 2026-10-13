@@ -6,6 +6,7 @@
 mod dial;
 mod m0;
 mod m4315;
+mod site;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -241,12 +242,29 @@ fn spawn(
 struct Session {
     wait: Duration,
     last_error: Option<String>,
+    module: &'static str,
+    site: Option<String>,
+    open: bool,
 }
 
 impl Session {
-    fn connected(&mut self) {
+    /// First successful open in this attempt. Later calls in the same session
+    /// do not publish again.
+    fn connected(&mut self, hub: &Hub) {
         self.wait = INITIAL_WAIT;
         self.last_error = None;
+        if !self.open {
+            self.open = true;
+            hub.set_module_site(self.module, self.site.clone());
+        }
+    }
+
+    fn disconnected(&mut self, hub: &Hub) {
+        self.site = None;
+        if self.open {
+            self.open = false;
+            hub.set_module_open(self.module, false);
+        }
     }
 }
 
@@ -260,12 +278,22 @@ fn supervise(
     let mut session = Session {
         wait: INITIAL_WAIT,
         last_error: None,
+        module: label,
+        site: None,
+        open: false,
     };
     loop {
         let result = match open_pid(pid) {
-            Ok(device) => serve(&device, &hub, &sink, &mut session),
+            Ok(device) => {
+                session.site = device_site(&device);
+                if let Some(site) = session.site.as_deref() {
+                    eprintln!("masterhubd: {label} site {site}");
+                }
+                serve(&device, &hub, &sink, &mut session)
+            }
             Err(err) => Err(err),
         };
+        session.disconnected(&hub);
         if let Err(err) = result {
             if err.contains("write failed") {
                 session.wait = MAX_WAIT;
@@ -352,7 +380,22 @@ fn led_index(control: ControlTarget) -> u8 {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 const UDEV_RULES: &str = include_str!("../../../../udev/60-openmasterhub.rules");
+
+fn device_site(device: &HidDevice) -> Option<String> {
+    let serial = device.get_serial_number_string().ok().flatten()?;
+    let output = std::process::Command::new("ioreg")
+        .args(["-p", "IOUSB", "-w0", "-l"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let location = site::locations_by_serial(&text).get(&serial).copied()?;
+    Some(site::site_key(location))
+}
 
 fn open_pid(pid: u16) -> Result<HidDevice, String> {
     let api = HidApi::new().map_err(|err| format!("HID init failed: {err}"))?;
@@ -447,7 +490,7 @@ fn serve_keys(
     device
         .send_feature_report(&software_mode_feature())
         .map_err(|err| format!("software mode failed: {err}"))?;
-    session.connected();
+    session.connected(hub);
     eprintln!("masterhubd: M4315 connected");
     let mut keys = released_snapshot();
     let mut buf = [0u8; READ_LEN];
@@ -498,7 +541,7 @@ fn serve_knobs(
     sink: &UsbSink,
     session: &mut Session,
 ) -> Result<(), String> {
-    session.connected();
+    session.connected(hub);
     eprintln!("masterhubd: M003K connected");
     let mut pressed = [false; 3];
     read_loop(device, |report| {
@@ -516,7 +559,7 @@ fn serve_rollers(
     _sink: &UsbSink,
     session: &mut Session,
 ) -> Result<(), String> {
-    session.connected();
+    session.connected(hub);
     eprintln!("masterhubd: M032LE connected");
     let mut seen = Vec::new();
     read_loop(device, |report| {
@@ -541,7 +584,7 @@ fn serve_sliders(
     sink: &UsbSink,
     session: &mut Session,
 ) -> Result<(), String> {
-    session.connected();
+    session.connected(hub);
     eprintln!("masterhubd: M005S connected");
     let mut values = [None; 5];
     read_loop(device, |report| {
@@ -561,11 +604,11 @@ fn serve_sliders(
 
 fn serve_base(
     device: &HidDevice,
-    _hub: &Hub,
+    hub: &Hub,
     sink: &UsbSink,
     session: &mut Session,
 ) -> Result<(), String> {
-    session.connected();
+    session.connected(hub);
     eprintln!("masterhubd: M0064 connected");
     read_loop(device, |_report| {
         drain_leds(device, &sink.base_leds, LED_BASE)
@@ -587,7 +630,7 @@ fn serve_dial(
     device
         .send_feature_report(&dial_software_mode())
         .map_err(|err| format!("software mode failed: {err}"))?;
-    session.connected();
+    session.connected(hub);
     eprintln!("masterhubd: 1xDial connected");
     let mut pressed = false;
     let mut seen = Vec::new();

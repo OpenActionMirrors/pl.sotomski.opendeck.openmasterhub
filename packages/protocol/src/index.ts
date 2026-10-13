@@ -138,7 +138,12 @@ export interface HelloMessage {
   v: 1;
   type: "hello";
   daemon: "masterhubd";
-  usb: false;
+  /** True when `modules` is not empty. */
+  usb: boolean;
+  /** Open modules, in daemon order. */
+  modules: string[];
+  /** Module name to pogo site, when the USB port is known. */
+  sites: Record<string, string>;
 }
 
 export type EventMessage =
@@ -148,6 +153,12 @@ export type EventMessage =
       type: "event";
       action: "set_button_image";
       payload: SetButtonImagePayload;
+    }
+  | {
+      v: 1;
+      type: "event";
+      action: "modules";
+      payload: { modules: string[]; sites: Record<string, string> };
     };
 
 export interface ResultMessage {

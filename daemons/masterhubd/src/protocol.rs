@@ -218,12 +218,17 @@ pub trait CommandSink: Send + Sync {
     fn accept(&self, command: &OutputCommand);
 }
 
-pub fn hello_json() -> String {
+/// `modules` is the open set, in a fixed order. `usb` is true when that list
+/// is not empty. `sites` maps a module name to its pogo-site key when the USB
+/// port is known.
+pub fn hello_json(modules: &[String], sites: &serde_json::Map<String, Value>) -> String {
     serde_json::json!({
         "v": PROTOCOL_VERSION,
         "type": "hello",
         "daemon": "masterhubd",
-        "usb": false,
+        "usb": !modules.is_empty(),
+        "modules": modules,
+        "sites": sites,
     })
     .to_string()
 }

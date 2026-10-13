@@ -23,10 +23,16 @@ There is no authentication. Binding to localhost is the access boundary. Any con
 On accept, the daemon sends one hello and then reads:
 
 ```json
-{ "v": 1, "type": "hello", "daemon": "masterhubd", "usb": false }
+{ "v": 1, "type": "hello", "daemon": "masterhubd", "usb": false, "modules": [], "sites": {} }
 ```
 
-`usb` stays `false` in this version, including while a module is open.
+`modules` is the set of modules open at that moment, in this order: `M4315`, `M003K`, `M032LE`, `M005S`, `M0064`, `1xDial`. `usb` is true when that list is not empty. `sites` maps a module name to its pogo site when the USB port is known. On macOS the site is the device location path with the bus byte and the Mac port nibble removed, so location `@02112400` is site `124`. A later change is broadcast:
+
+```json
+{ "v": 1, "type": "event", "action": "modules", "payload": { "modules": ["M4315", "1xDial"], "sites": { "1xDial": "122" } } }
+```
+
+The list is the full open set, not a delta. A client that connects after a module is already open sees it in hello. The site table is [base-usb-ports.md](base-usb-ports.md).
 
 ## Envelope
 
@@ -51,7 +57,7 @@ Daemon to client:
 | `type`   | When |
 | --- | --- |
 | `hello`  | Once, immediately after connect |
-| `event`  | Broadcast of an accepted trigger, of `set_button_image`, or of the same action once USB reading exists |
+| `event`  | Broadcast of an accepted trigger, of `set_button_image`, of `modules`, or of the same action once USB reading exists |
 | `result` | Direct reply to the sender of a valid trigger or command |
 | `error`  | Direct reply when the message is invalid, or when a binary frame arrives |
 

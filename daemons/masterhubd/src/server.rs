@@ -35,11 +35,7 @@ async fn handle_connection(stream: TcpStream, hub: Arc<Hub>) {
     let mut events = hub.subscribe();
     let (reply_tx, mut reply_rx) = mpsc::unbounded_channel();
 
-    if write
-        .send(Message::Text(protocol::hello_json()))
-        .await
-        .is_err()
-    {
+    if write.send(Message::Text(hub.hello_json())).await.is_err() {
         return;
     }
 
@@ -144,6 +140,7 @@ mod tests {
             assert_eq!(hello["type"], "hello");
             assert_eq!(hello["daemon"], "masterhubd");
             assert_eq!(hello["usb"], false);
+            assert_eq!(hello["modules"], serde_json::json!([]));
         }
 
         client_a
