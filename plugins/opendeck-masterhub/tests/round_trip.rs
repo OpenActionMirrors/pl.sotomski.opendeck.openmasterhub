@@ -57,7 +57,7 @@ fn spawn_plugin(opendeck_port: u16, hub_addr: SocketAddr) -> Child {
             "-port",
             &opendeck_port.to_string(),
             "-pluginUUID",
-            "com.openmasterhub.opendeck",
+            "pl.sotomski.opendeck.openmasterhub",
             "-registerEvent",
             "registerPlugin",
         ])
@@ -125,7 +125,7 @@ async fn key_press_and_image_round_trip() {
 
     let register = next_message(&mut host_inbox).await;
     assert_eq!(register["event"], "registerPlugin");
-    assert_eq!(register["uuid"], "com.openmasterhub.opendeck");
+    assert_eq!(register["uuid"], "pl.sotomski.opendeck.openmasterhub");
 
     let (mut deck, _) = connect_async(format!("ws://{hub_addr}")).await.unwrap();
     let hello: Value = serde_json::from_str(&next_text(&mut deck).await).unwrap();

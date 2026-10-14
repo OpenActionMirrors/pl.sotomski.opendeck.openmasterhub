@@ -5,9 +5,9 @@ use serde_json::{json, Value};
 use crate::dial_feedback;
 use crate::map::{self, BASE, KEYS, KNOBS};
 
-pub const SET_COLOR: &str = "com.openmasterhub.opendeck.rgbcolor";
-pub const SET_MODE: &str = "com.openmasterhub.opendeck.rgbmode";
-pub const SET_BRIGHTNESS: &str = "com.openmasterhub.opendeck.setbrightness";
+pub const SET_COLOR: &str = "pl.sotomski.opendeck.openmasterhub.rgbcolor";
+pub const SET_MODE: &str = "pl.sotomski.opendeck.openmasterhub.rgbmode";
+pub const SET_BRIGHTNESS: &str = "pl.sotomski.opendeck.openmasterhub.setbrightness";
 
 const MODES: &[&str] = &[
     "disable",
@@ -982,7 +982,7 @@ mod tests {
     fn an_empty_target_list_sends_nothing() {
         assert!(color(json!({"targets": []})).is_empty());
         assert!(color(json!({"targets": "all", "h": 0, "s": 0, "l": 0})).is_empty());
-        assert!(commands("com.openmasterhub.opendeck.other", &json!({})).is_empty());
+        assert!(commands("pl.sotomski.opendeck.openmasterhub.other", &json!({})).is_empty());
     }
 
     #[test]

@@ -28,7 +28,7 @@ windows_archive_tool_ready() {
 }
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-plugin_id=com.openmasterhub.opendeck.sdPlugin
+plugin_id=pl.sotomski.opendeck.openmasterhub.sdPlugin
 manifest=$root/plugins/opendeck-masterhub/Cargo.toml
 out_dir=$root/dist
 stage=$out_dir/$plugin_id

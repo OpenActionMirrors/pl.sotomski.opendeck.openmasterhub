@@ -61,8 +61,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: com.openmasterhub.opendeck.sdPlugin
-          path: dist/com.openmasterhub.opendeck.sdPlugin.zip
+          name: pl.sotomski.opendeck.openmasterhub.sdPlugin
+          path: dist/pl.sotomski.opendeck.openmasterhub.sdPlugin.zip
           if-no-files-found: error
 
       - name: Publish the GitHub release
@@ -70,7 +70,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="$GITHUB_REF_NAME"
-          asset="dist/com.openmasterhub.opendeck.sdPlugin.zip"
+          asset="dist/pl.sotomski.opendeck.openmasterhub.sdPlugin.zip"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$asset" --clobber
           else

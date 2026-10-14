@@ -13,7 +13,7 @@ mod icons;
 mod map;
 mod sim;
 
-const PLUGIN_UUID: &str = "com.openmasterhub.opendeck";
+const PLUGIN_UUID: &str = "pl.sotomski.opendeck.openmasterhub";
 
 static BRIGHTNESS: LazyLock<Mutex<actions::BrightnessBook>> =
     LazyLock::new(|| Mutex::new(actions::BrightnessBook::default()));

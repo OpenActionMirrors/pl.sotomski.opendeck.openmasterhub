@@ -8,7 +8,7 @@ It runs on **Linux**, **macOS**, and **Windows**.
 
 ## Install
 
-1. Download `com.openmasterhub.opendeck.sdPlugin.zip` from the [releases](https://github.com/OpenMasterHub/openmasterhub/releases) page.
+1. Download `pl.sotomski.opendeck.openmasterhub.sdPlugin.zip` from the [releases](https://github.com/OpenMasterHub/openmasterhub/releases) page.
 2. In OpenDeck, choose **Plugins → Install from file** and select that zip.
 3. Plug in the MasterHub. OpenDeck starts the plugin, and the plugin talks to the hub on its own.
 
