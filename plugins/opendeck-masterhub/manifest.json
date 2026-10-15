@@ -1,6 +1,6 @@
 {
   "Name": "Unofficial MasterHub Device Support",
-  "Description": "Unofficial MasterHub Device Support. Starts masterhubd when it is not already listening, then registers the device.",
+  "Description": "Unofficial MasterHub Device Support. Starts masterhubd in the background when it is not already listening, then registers the device.",
   "Author": "OpenMasterHub",
   "Version": "0.2.0",
   "PluginUUID": "pl.sotomski.opendeck.openmasterhub",

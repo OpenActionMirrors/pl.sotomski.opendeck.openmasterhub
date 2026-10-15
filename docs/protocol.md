@@ -10,7 +10,9 @@ Action payloads are listed in [protocol/actions.md](protocol/actions.md).
 
 Default URL: `ws://127.0.0.1:9123`
 
-Set `MASTERHUBD_LISTEN` to another `host:port` (for example `127.0.0.1:0` in tests). The process listens on that address and prints the bound URL on stderr.
+Set `MASTERHUBD_LISTEN` to another `host:port` (for example `127.0.0.1:0` in tests). The process listens on that address and prints the bound URL on stderr. If the address is already in use, the process prints a line and exits with status 0.
+
+Idle shutdown is off unless `MASTERHUBD_IDLE_SECS` is a positive number of seconds. With that set, the process exits after that long with no WebSocket clients connected. `0` or an unset variable leaves it running.
 
 Set `MASTERHUBD_DEBUG=1` (or `true`) to print each published action on stderr. That covers hardware input from every module and injected triggers. `data_base64` is replaced with its character count.
 

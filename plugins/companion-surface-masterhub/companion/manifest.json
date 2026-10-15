@@ -1,0 +1,27 @@
+{
+	"type": "surface",
+	"id": "masterhub-surface",
+	"name": "MasterHub Surface",
+	"shortname": "MasterHub",
+	"description": "Use a MasterHub as a Companion surface through masterhubd",
+	"version": "0.1.3",
+	"license": "MIT",
+	"repository": "git+https://github.com/OpenMasterHub/openmasterhub.git",
+	"bugs": "https://github.com/OpenMasterHub/openmasterhub/issues",
+	"maintainers": [
+		{
+			"name": "OpenMasterHub"
+		}
+	],
+	"runtime": {
+		"type": "node26",
+		"api": "nodejs-ipc",
+		"apiVersion": "1.4.0",
+		"entrypoint": "../dist/main.js"
+	},
+	"manufacturer": "MasterHub",
+	"products": ["MasterHub"],
+	"keywords": ["masterhub"],
+	"usbIds": [],
+	"allowMultipleInstances": false
+}

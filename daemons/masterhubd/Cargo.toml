@@ -3,6 +3,7 @@ name = "masterhubd"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 rust-version.workspace = true
 description = "USB HID daemon for the Master Hub"
 
@@ -15,5 +16,5 @@ hidapi = { version = "2.6.6", default-features = false, features = ["macos-share
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 tokio-tungstenite = "0.24"

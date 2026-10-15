@@ -1,22 +1,25 @@
 {
   "name": "@openmasterhub/sdk",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "JavaScript client for the OpenMasterHub local API",
+  "license": "MIT",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsc -p ../../packages/protocol/tsconfig.build.json && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/client.test.ts"
-  },
-  "dependencies": {
-    "@openmasterhub/protocol": "workspace:*"
+    "test": "node --experimental-strip-types --test src/client.test.ts src/daemon.test.ts"
   },
   "devDependencies": {
+    "@openmasterhub/protocol": "workspace:*",
     "@types/node": "^22.15.3",
     "@types/ws": "^8.18.1",
     "typescript": "~5.8.3",

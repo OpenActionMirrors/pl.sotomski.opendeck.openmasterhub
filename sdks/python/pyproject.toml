@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "openmasterhub-sdk"
 version = "0.1.0"
 description = "Python client for the OpenMasterHub local API"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = ["websockets>=13"]
 

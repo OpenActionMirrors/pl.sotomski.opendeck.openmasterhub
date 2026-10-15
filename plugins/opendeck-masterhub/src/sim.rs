@@ -1,9 +1,9 @@
+use std::process::{Child, Command, Stdio};
 use std::sync::LazyLock;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, Mutex};
-use tokio::task::JoinHandle;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -27,29 +27,117 @@ pub async fn enqueue(text: String) {
 }
 
 pub async fn run() {
-    let mut daemon: Option<JoinHandle<()>> = None;
+    let mut daemon: Option<Child> = None;
     loop {
-        if !port_open().await {
-            let running = daemon.as_ref().is_some_and(|task| !task.is_finished());
-            if !running {
-                log::info!("starting masterhubd on {}", listen_addr());
-                daemon = Some(tokio::spawn(async {
-                    match masterhubd::run().await {
-                        Ok(()) => log::info!("masterhubd stopped"),
-                        Err(error) => log::error!("masterhubd: {error}"),
-                    }
-                }));
-            }
-            if !wait_for_port().await {
-                log::error!("masterhubd is not listening on {}", listen_addr());
-            }
-        }
-
         match session().await {
-            Ok(()) => log::info!("simulator session ended"),
-            Err(error) => log::debug!("simulator connection failed: {error}"),
+            Ok(()) => {
+                reap(&mut daemon);
+                log::info!("simulator session ended");
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+            Err(error) => {
+                log::debug!("simulator connection failed: {error}");
+                ensure_daemon(&mut daemon).await;
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
         }
-        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+}
+
+async fn ensure_daemon(daemon: &mut Option<Child>) {
+    reap(daemon);
+    if port_open().await {
+        return;
+    }
+    if daemon.is_none() {
+        log::info!("starting masterhubd on {}", listen_addr());
+        *daemon = launch_daemon();
+    }
+    if !wait_for_port().await {
+        log::error!("masterhubd is not listening on {}", listen_addr());
+    }
+    reap(daemon);
+}
+
+fn reap(daemon: &mut Option<Child>) {
+    let Some(child) = daemon.as_mut() else {
+        return;
+    };
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            if !status.success() {
+                log::error!("masterhubd exited: {status}");
+            }
+            *daemon = None;
+        }
+        Ok(None) => {}
+        Err(error) => {
+            log::error!("masterhubd status: {error}");
+            *daemon = None;
+        }
+    }
+}
+
+/// Start a detached copy of this executable. A second copy exits 0 when the
+/// port is already taken, so two plugins can launch at once. The daemon is
+/// reparented away from this process, so quitting OpenDeck does not stop it.
+fn launch_daemon() -> Option<Child> {
+    let exe = match std::env::current_exe() {
+        Ok(exe) => exe,
+        Err(error) => {
+            log::error!("cannot find the plugin executable: {error}");
+            return None;
+        }
+    };
+    let mut cmd = Command::new(exe);
+    cmd.arg("--masterhubd")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit());
+    #[cfg(unix)]
+    detach_from_parent(&mut cmd);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+    }
+    match cmd.spawn() {
+        Ok(child) => Some(child),
+        Err(error) => {
+            log::error!("failed to start masterhubd: {error}");
+            None
+        }
+    }
+}
+
+/// Double-fork and start a new session. Quitting OpenDeck kills its process
+/// tree; a grandchild whose parent has already exited is reparented and stays up.
+#[cfg(unix)]
+fn detach_from_parent(cmd: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    extern "C" {
+        fn fork() -> i32;
+        fn setsid() -> i32;
+        fn _exit(code: i32) -> !;
+    }
+
+    // SAFETY: runs in the forked child before exec, and only calls
+    // async-signal-safe functions.
+    unsafe {
+        cmd.pre_exec(|| match fork() {
+            -1 => Err(std::io::Error::last_os_error()),
+            0 => {
+                if setsid() == -1 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(())
+                }
+            }
+            _ => _exit(0),
+        });
     }
 }
 

@@ -1,0 +1,27 @@
+{
+	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+	"type": "connection",
+	"id": "masterhub",
+	"name": "MasterHub",
+	"shortname": "MasterHub",
+	"description": "Set MasterHub knob and base LED color, mode, and brightness through masterhubd",
+	"version": "0.1.2",
+	"license": "MIT",
+	"repository": "git+https://github.com/OpenMasterHub/openmasterhub.git",
+	"bugs": "https://github.com/OpenMasterHub/openmasterhub/issues",
+	"maintainers": [
+		{
+			"name": "OpenMasterHub"
+		}
+	],
+	"runtime": {
+		"type": "node26",
+		"api": "nodejs-ipc",
+		"apiVersion": "0.0.0",
+		"entrypoint": "../dist/main.js"
+	},
+	"legacyIds": [],
+	"manufacturer": "MasterHub",
+	"products": ["MasterHub"],
+	"keywords": ["masterhub", "led"]
+}

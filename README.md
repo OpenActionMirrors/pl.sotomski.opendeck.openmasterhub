@@ -50,3 +50,7 @@ Unplug the hub, plug it back in, and restart OpenDeck.
 
 - **Slider LEDs.** Moving a slider runs its encoder action. The slider lights are not set from OpenDeck.
 - **Rollers on macOS.** The rollers do not work on Mac. Keys, knobs, and the dial still do.
+
+## License
+
+[MIT](LICENSE).

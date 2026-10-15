@@ -16,7 +16,7 @@ You can build plugins for OBS Studio, Spotify, Home Assistant, or OS utilities u
 - Run the simulator GUI: `pnpm run dev:simulator`.
 
 ### 3. OpenDeck
-- The device plugin lives in `plugins/opendeck-masterhub`. It starts `masterhubd` when the daemon socket is closed, then registers the Master Hub in OpenDeck.
+- The device plugin lives in `plugins/opendeck-masterhub`. It starts `masterhubd` in the background when the connection fails, then registers the Master Hub in OpenDeck. Quitting OpenDeck leaves that daemon running. The Companion plugins start it the same way for a localhost address.
 - Look for open issues tagged with **`good first issue`**.
 
 ---

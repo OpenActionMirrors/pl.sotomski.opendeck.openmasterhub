@@ -1,8 +1,10 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, Notify};
 use tokio_tungstenite::accept_async_with_config;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::Message;
@@ -13,16 +15,113 @@ use crate::protocol;
 const MAX_FRAME_BYTES: usize = 128 * 1024;
 
 pub async fn serve(listener: TcpListener, hub: Arc<Hub>) -> std::io::Result<()> {
-    loop {
-        let (stream, _) = listener.accept().await?;
-        let hub = Arc::clone(&hub);
-        tokio::spawn(async move {
-            handle_connection(stream, hub).await;
-        });
+    serve_idle(listener, hub, None).await
+}
+
+pub(crate) async fn serve_idle(
+    listener: TcpListener,
+    hub: Arc<Hub>,
+    idle: Option<Duration>,
+) -> std::io::Result<()> {
+    let clients = Arc::new(ClientCount::new());
+    if let Some(idle) = idle {
+        let mut idle_wait = std::pin::pin!(wait_for_idle(Arc::clone(&clients), idle));
+        loop {
+            tokio::select! {
+                biased;
+                _ = &mut idle_wait => {
+                    eprintln!("masterhubd: no clients for {}, stopping", format_idle(idle));
+                    return Ok(());
+                }
+                accepted = listener.accept() => {
+                    let (stream, _) = accepted?;
+                    spawn_client(stream, Arc::clone(&hub), Arc::clone(&clients));
+                }
+            }
+        }
+    } else {
+        loop {
+            let (stream, _) = listener.accept().await?;
+            spawn_client(stream, Arc::clone(&hub), Arc::clone(&clients));
+        }
     }
 }
 
-async fn handle_connection(stream: TcpStream, hub: Arc<Hub>) {
+fn spawn_client(stream: TcpStream, hub: Arc<Hub>, clients: Arc<ClientCount>) {
+    tokio::spawn(async move {
+        handle_connection(stream, hub, clients).await;
+    });
+}
+
+fn format_idle(idle: Duration) -> String {
+    let ms = idle.as_millis();
+    if ms % 1000 == 0 {
+        format!("{}s", ms / 1000)
+    } else {
+        format!("{ms}ms")
+    }
+}
+
+struct ClientCount {
+    n: AtomicUsize,
+    changed: Notify,
+}
+
+impl ClientCount {
+    fn new() -> Self {
+        Self {
+            n: AtomicUsize::new(0),
+            changed: Notify::new(),
+        }
+    }
+
+    fn get(&self) -> usize {
+        self.n.load(Ordering::Acquire)
+    }
+
+    fn hold(self: &Arc<Self>) -> ClientGuard {
+        self.n.fetch_add(1, Ordering::AcqRel);
+        self.changed.notify_one();
+        ClientGuard {
+            count: Arc::clone(self),
+        }
+    }
+}
+
+struct ClientGuard {
+    count: Arc<ClientCount>,
+}
+
+impl Drop for ClientGuard {
+    fn drop(&mut self) {
+        self.count.n.fetch_sub(1, Ordering::AcqRel);
+        self.count.changed.notify_one();
+    }
+}
+
+/// Completes after `idle` with a client count of zero. A connection starts the
+/// wait over when it ends.
+async fn wait_for_idle(clients: Arc<ClientCount>, idle: Duration) {
+    loop {
+        let notified = clients.changed.notified();
+        tokio::pin!(notified);
+        if clients.get() == 0 {
+            tokio::select! {
+                biased;
+                _ = &mut notified => {}
+                _ = tokio::time::sleep(idle) => {
+                    if clients.get() == 0 {
+                        return;
+                    }
+                }
+            }
+        } else {
+            notified.await;
+        }
+    }
+}
+
+async fn handle_connection(stream: TcpStream, hub: Arc<Hub>, clients: Arc<ClientCount>) {
     let config = WebSocketConfig {
         max_message_size: Some(MAX_FRAME_BYTES),
         max_frame_size: Some(MAX_FRAME_BYTES),
@@ -31,6 +130,7 @@ async fn handle_connection(stream: TcpStream, hub: Arc<Hub>) {
     let Ok(ws) = accept_async_with_config(stream, Some(config)).await else {
         return;
     };
+    let _client = clients.hold();
     let (mut write, mut read) = ws.split();
     let mut events = hub.subscribe();
     let (reply_tx, mut reply_rx) = mpsc::unbounded_channel();
@@ -91,6 +191,7 @@ async fn handle_connection(stream: TcpStream, hub: Arc<Hub>) {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::time::Duration;
 
     use futures_util::{SinkExt, StreamExt};
     use tokio::net::TcpListener;
@@ -214,5 +315,50 @@ mod tests {
         assert_eq!(next_b["action"], "slider_moved");
         assert_eq!(next_b["payload"]["control"], 1);
         assert_eq!(next_b["payload"]["value"], 40);
+    }
+
+    #[tokio::test]
+    async fn idle_timeout_stops_the_listener_when_no_client_is_connected() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let hub = Arc::new(Hub::new(Arc::new(NoopCommandSink)));
+        let serve = tokio::spawn(serve_idle(listener, hub, Some(Duration::from_millis(400))));
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        assert!(
+            tokio::net::TcpStream::connect(addr).await.is_err(),
+            "listener stayed open with no clients"
+        );
+        tokio::time::timeout(Duration::from_secs(2), serve)
+            .await
+            .expect("server did not stop")
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_connected_client_holds_off_the_idle_timeout() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let hub = Arc::new(Hub::new(Arc::new(NoopCommandSink)));
+        let serve = tokio::spawn(serve_idle(listener, hub, Some(Duration::from_millis(400))));
+
+        let (socket, _) = connect_async(format!("ws://{addr}")).await.unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        assert!(
+            tokio::net::TcpStream::connect(addr).await.is_ok(),
+            "listener closed while a client was connected"
+        );
+        drop(socket);
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        assert!(
+            tokio::net::TcpStream::connect(addr).await.is_err(),
+            "listener stayed open after the last client left"
+        );
+        tokio::time::timeout(Duration::from_secs(2), serve)
+            .await
+            .expect("server did not stop")
+            .unwrap()
+            .unwrap();
     }
 }

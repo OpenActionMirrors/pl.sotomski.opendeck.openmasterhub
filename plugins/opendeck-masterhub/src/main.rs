@@ -344,6 +344,13 @@ async fn dispatch(action: &str, settings: &Value) {
 
 #[tokio::main]
 async fn main() {
+    if std::env::args().any(|arg| arg == "--masterhubd") {
+        if let Err(error) = masterhubd::run().await {
+            eprintln!("masterhubd: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let _ =
         simplelog::SimpleLogger::init(simplelog::LevelFilter::Info, simplelog::Config::default());
     if let Err(error) = openaction::init_plugin(Handler, Actions).await {

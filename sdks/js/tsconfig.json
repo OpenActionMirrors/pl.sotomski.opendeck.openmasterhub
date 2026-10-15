@@ -10,7 +10,11 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "baseUrl": ".",
+    "paths": {
+      "@openmasterhub/protocol": ["../../packages/protocol/src/index.ts"]
+    }
   },
   "include": ["src"]
 }

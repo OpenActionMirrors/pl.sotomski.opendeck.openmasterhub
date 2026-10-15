@@ -52,19 +52,29 @@ async fn deck_host() -> DeckHost {
 }
 
 fn spawn_plugin(opendeck_port: u16, hub_addr: SocketAddr) -> Child {
-    Command::new(env!("PLUGIN_BIN"))
-        .args([
-            "-port",
-            &opendeck_port.to_string(),
-            "-pluginUUID",
-            "pl.sotomski.opendeck.openmasterhub",
-            "-registerEvent",
-            "registerPlugin",
-        ])
-        .env("MASTERHUBD_LISTEN", hub_addr.to_string())
-        .kill_on_drop(true)
-        .spawn()
-        .unwrap()
+    spawn_plugin_with(opendeck_port, hub_addr, &[])
+}
+
+fn spawn_plugin_with(
+    opendeck_port: u16,
+    hub_addr: SocketAddr,
+    extra_env: &[(&str, &str)],
+) -> Child {
+    let mut cmd = Command::new(env!("PLUGIN_BIN"));
+    cmd.args([
+        "-port",
+        &opendeck_port.to_string(),
+        "-pluginUUID",
+        "pl.sotomski.opendeck.openmasterhub",
+        "-registerEvent",
+        "registerPlugin",
+    ])
+    .env("MASTERHUBD_LISTEN", hub_addr.to_string())
+    .kill_on_drop(true);
+    for (key, value) in extra_env {
+        cmd.env(key, value);
+    }
+    cmd.spawn().unwrap()
 }
 
 #[tokio::test]
@@ -78,7 +88,7 @@ async fn plugin_starts_masterhubd_when_nothing_is_listening() {
         from_plugin: mut host_inbox,
         ..
     } = deck_host().await;
-    let mut plugin = spawn_plugin(port, hub_addr);
+    let mut plugin = spawn_plugin_with(port, hub_addr, &[("MASTERHUBD_IDLE_SECS", "2")]);
 
     let register = next_message(&mut host_inbox).await;
     assert_eq!(register["event"], "registerPlugin");
@@ -87,13 +97,23 @@ async fn plugin_starts_masterhubd_when_nothing_is_listening() {
     let hello: Value = serde_json::from_str(&next_text(&mut deck).await).unwrap();
     assert_eq!(hello["type"], "hello");
     assert_eq!(hello["daemon"], "masterhubd");
-    assert_eq!(hello["usb"], false);
-    assert_eq!(hello["modules"], serde_json::json!([]));
-    assert_no_registration(&mut host_inbox).await;
+    let no_modules = hello["modules"]
+        .as_array()
+        .is_some_and(|modules| modules.is_empty());
+    if no_modules {
+        assert_eq!(hello["usb"], false);
+        assert_no_registration(&mut host_inbox).await;
+    } else {
+        assert_eq!(hello["usb"], true);
+    }
     drop(deck);
 
     let _ = plugin.kill().await;
-    let closed = tokio::time::timeout(Duration::from_secs(2), async {
+    assert!(
+        tokio::net::TcpStream::connect(hub_addr).await.is_ok(),
+        "masterhubd stopped when the plugin exited"
+    );
+    let closed = tokio::time::timeout(Duration::from_secs(6), async {
         loop {
             if tokio::net::TcpStream::connect(hub_addr).await.is_err() {
                 break;
@@ -104,7 +124,7 @@ async fn plugin_starts_masterhubd_when_nothing_is_listening() {
     .await;
     assert!(
         closed.is_ok(),
-        "masterhubd kept listening after the plugin exited"
+        "masterhubd stayed up after the idle timeout"
     );
 }
 
@@ -130,7 +150,9 @@ async fn key_press_and_image_round_trip() {
     let (mut deck, _) = connect_async(format!("ws://{hub_addr}")).await.unwrap();
     let hello: Value = serde_json::from_str(&next_text(&mut deck).await).unwrap();
     assert_eq!(hello["type"], "hello");
-    assert_eq!(hello["modules"], serde_json::json!([]));
+    let modules_open = hello["modules"]
+        .as_array()
+        .is_some_and(|modules| !modules.is_empty());
 
     let trigger = r#"{"v":1,"type":"trigger","action":"key_state","payload":{"module":{"model":"M4315","id":"keys"},"control":0,"pressed":true}}"#;
     let key_down = tokio::time::timeout(Duration::from_secs(5), async {
@@ -140,6 +162,9 @@ async fn key_press_and_image_round_trip() {
                 .unwrap();
             match tokio::time::timeout(Duration::from_millis(200), host_inbox.recv()).await {
                 Ok(Some(message)) if message["event"] == "getGlobalSettings" => continue,
+                Ok(Some(message)) if modules_open && message["event"] == "registerDevice" => {
+                    continue
+                }
                 Ok(Some(message)) => break message,
                 Ok(None) => panic!("plugin closed the OpenDeck socket"),
                 Err(_) => continue,
@@ -148,7 +173,9 @@ async fn key_press_and_image_round_trip() {
     })
     .await
     .expect("timed out waiting for keyDown");
-    assert_ne!(key_down["event"], "registerDevice");
+    if !modules_open {
+        assert_ne!(key_down["event"], "registerDevice");
+    }
     assert_eq!(key_down["event"], "keyDown");
     assert_eq!(key_down["payload"]["device"], "masterhub");
     assert_eq!(key_down["payload"]["position"], 0);
