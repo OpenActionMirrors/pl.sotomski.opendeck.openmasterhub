@@ -2,7 +2,7 @@
   "Name": "Unofficial MasterHub Device Support",
   "Description": "Unofficial MasterHub Device Support. Starts masterhubd when it is not already listening, then registers the device.",
   "Author": "OpenMasterHub",
-  "Version": "0.2.0",
+  "Version": "0.2.2",
   "PluginUUID": "pl.sotomski.opendeck.openmasterhub",
   "CodePath": "opendeck-masterhub",
   "CodePathLin": "opendeck-masterhub-linux",

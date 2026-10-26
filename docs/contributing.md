@@ -33,7 +33,7 @@ Push a tag that starts with `v`, for example `v0.1.0`. [Release OpenDeck plugin]
 
 ## Layout notes
 
-`masterhubd` listens on `ws://127.0.0.1:9123` (override with `MASTERHUBD_LISTEN`). Set `MASTERHUBD_DEBUG=1` to print each published action on stderr. It opens an M4315, M003K, M032LE, M0064, M005S, and the 1xDial module when that device is present. On Linux, the first start that cannot open those hidraw nodes asks to install `udev/60-openmasterhub.rules`. The OpenDeck plugin in `plugins/opendeck-masterhub` starts `masterhubd` when that socket is closed, then connects and registers the device. See [plugins.md](plugins.md).
+`masterhubd` listens on `ws://127.0.0.1:9123` (override with `MASTERHUBD_LISTEN`). Set `MASTERHUBD_DEBUG=1` to print each published action on stderr. It opens an M4315, M003K, M032LE, M0064, M005S, and the 1xDial module when that device is present. On macOS, connecting the roller sends HID SET_IDLE so the module starts reporting. On Linux, the first start that cannot open those hidraw nodes asks to install `udev/60-openmasterhub.rules`. The OpenDeck plugin in `plugins/opendeck-masterhub` starts `masterhubd` when that socket is closed, then connects and registers the device. See [plugins.md](plugins.md).
 
 The JavaScript and Python SDKs are WebSocket clients for other programs that talk to `masterhubd` directly.
 

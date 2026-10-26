@@ -6,6 +6,7 @@
 mod dial;
 mod m0;
 mod m4315;
+mod set_idle;
 mod site;
 
 use std::collections::BTreeMap;
@@ -559,6 +560,8 @@ fn serve_rollers(
     _sink: &UsbSink,
     session: &mut Session,
 ) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    set_idle::set_idle(device)?;
     session.connected(hub);
     eprintln!("masterhubd: M032LE connected");
     let mut seen = Vec::new();

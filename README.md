@@ -2,7 +2,7 @@
 
 This is an unofficial [OpenDeck](https://github.com/nekename/OpenDeck) device plugin for the MasterHub.
 
-When a keypad, knob, roller, or dial module is connected, OpenDeck shows a device named **Master Hub**. The canvas shows only the modules that are plugged in, and a module appears or disappears when it is hot-swapped. Icons you assign in OpenDeck appear on the keys and on the dial screen. Presses, knob turns, and (where they work) roller turns run the actions you set on those controls.
+When a keypad, knob, roller, or dial module is connected, OpenDeck shows a device named **Master Hub**. The canvas shows only the modules that are plugged in, and a module appears or disappears when it is hot-swapped. Icons you assign in OpenDeck appear on the keys and on the dial screen. Presses, knob turns, and roller turns run the actions you set on those controls.
 
 It runs on **Linux**, **macOS**, and **Windows**.
 
@@ -35,7 +35,7 @@ Unplug the hub, plug it back in, and restart OpenDeck.
 | 15 keys (3×5) | Press and release. Icons from OpenDeck are shown on the keys. Key backlight brightness follows OpenDeck’s brightness setting. |
 | 3 knobs | Turn and press. Top knob, then the two knobs under it. |
 | Dial | Turn, press, and the image on the round screen. |
-| 2 rollers | Turn, on Linux and Windows. |
+| 2 rollers | Turn. |
 | 5 sliders | Move. OpenDeck shows them as encoders, left to right. |
 
 ## Actions
@@ -49,4 +49,3 @@ Unplug the hub, plug it back in, and restart OpenDeck.
 ## Not supported
 
 - **Slider LEDs.** Moving a slider runs its encoder action. The slider lights are not set from OpenDeck.
-- **Rollers on macOS.** The rollers do not work on Mac. Keys, knobs, and the dial still do.
