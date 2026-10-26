@@ -3,8 +3,14 @@
 # OpenDeck requires a top-level directory whose name ends in .sdPlugin.
 #
 # macOS and Linux both launch a binary with no extension, so they cannot share
-# a filename. CodePathMac is opendeck-masterhub. CodePathLin is
-# opendeck-masterhub-linux. CodePathWin is opendeck-masterhub.exe.
+# a filename. CodePathMac is opendeck-masterhub, a universal Mach-O (arm64 and
+# x86_64). CodePathLin is opendeck-masterhub-linux. CodePathWin is
+# opendeck-masterhub.exe.
+#
+# On macOS this script builds that universal binary. The release workflow
+# builds it on a macOS runner (MAC_ONLY=1) and passes it to the Ubuntu package
+# step as MAC_BIN. OpenDeck on macOS starts CodePathMac during install. A zip
+# without that file fails with: No such file or directory.
 set -eu
 
 # cargo-xwin archives Windows C objects with llvm-lib. It finds that tool on
@@ -39,9 +45,62 @@ linux_rust_target=x86_64-unknown-linux-gnu
 # glibc 2.31 matches Ubuntu 20.04 and newer desktop distros.
 linux_target=$linux_rust_target.2.31
 linux_bin=$root/plugins/opendeck-masterhub/target/$linux_rust_target/release/opendeck-masterhub
+mac_target_arm=aarch64-apple-darwin
+mac_target_x64=x86_64-apple-darwin
 host_os=$(uname -s)
 
-cargo build --release --manifest-path "$manifest"
+if [ "${MAC_ONLY:-}" = "1" ] && [ "$host_os" != "Darwin" ]; then
+  echo "MAC_ONLY=1 builds opendeck-masterhub and must run on macOS." >&2
+  exit 1
+fi
+
+if [ -n "${MAC_BIN:-}" ] && [ ! -f "$MAC_BIN" ]; then
+  echo "MAC_BIN does not exist: $MAC_BIN" >&2
+  exit 1
+fi
+
+# Manifest MinimumVersion for mac is 11.3. rustc passes this to the linker.
+build_universal_mac() {
+  if ! command -v rustup >/dev/null 2>&1; then
+    echo "rustup is required to install the macOS standard libraries." >&2
+    echo "Install rustup from https://rustup.rs, then rerun this script." >&2
+    exit 1
+  fi
+  if ! command -v lipo >/dev/null 2>&1; then
+    echo "lipo is required to build the universal macOS plugin binary." >&2
+    exit 1
+  fi
+  MACOSX_DEPLOYMENT_TARGET=11.3
+  export MACOSX_DEPLOYMENT_TARGET
+  for target in "$mac_target_arm" "$mac_target_x64"; do
+    if ! rustup target list --installed | grep -qx "$target"; then
+      rustup target add "$target"
+    fi
+    cargo build --release --target "$target" --manifest-path "$manifest"
+  done
+  mkdir -p "$out_dir"
+  lipo -create \
+    -output "$out_dir/opendeck-masterhub" \
+    "$root/plugins/opendeck-masterhub/target/$mac_target_arm/release/opendeck-masterhub" \
+    "$root/plugins/opendeck-masterhub/target/$mac_target_x64/release/opendeck-masterhub"
+  chmod +x "$out_dir/opendeck-masterhub"
+}
+
+if [ "${MAC_ONLY:-}" = "1" ]; then
+  build_universal_mac
+  echo "$out_dir/opendeck-masterhub"
+  exit 0
+fi
+
+if [ "$host_os" != "Darwin" ] && [ -z "${MAC_BIN:-}" ]; then
+  echo "MAC_BIN must point at a macOS build of opendeck-masterhub." >&2
+  echo "OpenDeck on macOS starts CodePathMac. Without that file, install fails with: No such file or directory." >&2
+  exit 1
+fi
+
+if [ "$host_os" != "Darwin" ]; then
+  cargo build --release --manifest-path "$manifest"
+fi
 
 if [ ! -f "$release/opendeck-masterhub.exe" ]; then
   if ! command -v cargo-xwin >/dev/null 2>&1; then
@@ -97,10 +156,14 @@ cp -R "$root/plugins/opendeck-masterhub/propertyInspector" "$stage/propertyInspe
 mkdir -p "$stage/udev"
 cp "$root/udev/60-openmasterhub.rules" "$stage/udev/60-openmasterhub.rules"
 
-if [ "$host_os" = "Darwin" ] && [ -f "$release/opendeck-masterhub" ]; then
-  cp "$release/opendeck-masterhub" "$stage/opendeck-masterhub"
-  chmod +x "$stage/opendeck-masterhub"
+if [ -n "${MAC_BIN:-}" ]; then
+  mac_bin=$MAC_BIN
+else
+  build_universal_mac
+  mac_bin=$out_dir/opendeck-masterhub
 fi
+cp "$mac_bin" "$stage/opendeck-masterhub"
+chmod +x "$stage/opendeck-masterhub"
 if [ -f "$linux_bin" ]; then
   cp "$linux_bin" "$stage/opendeck-masterhub-linux"
   chmod +x "$stage/opendeck-masterhub-linux"
@@ -111,6 +174,10 @@ elif [ -f "$win_exe" ]; then
   cp "$win_exe" "$stage/opendeck-masterhub.exe"
 fi
 
+if [ ! -f "$stage/opendeck-masterhub" ]; then
+  echo "opendeck-masterhub was not packaged; macOS OpenDeck cannot start the plugin" >&2
+  exit 1
+fi
 if [ ! -f "$stage/opendeck-masterhub.exe" ]; then
   echo "opendeck-masterhub.exe was not packaged; Windows OpenDeck cannot start the plugin" >&2
   exit 1
@@ -120,6 +187,19 @@ if [ ! -f "$stage/opendeck-masterhub-linux" ]; then
   exit 1
 fi
 if command -v file >/dev/null 2>&1; then
+  mac_file=$(file "$stage/opendeck-masterhub")
+  if ! printf '%s\n' "$mac_file" | grep -q 'Mach-O'; then
+    echo "opendeck-masterhub is not a macOS executable" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$mac_file" | grep -q 'arm64'; then
+    echo "opendeck-masterhub is missing the arm64 slice" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$mac_file" | grep -q 'x86_64'; then
+    echo "opendeck-masterhub is missing the x86_64 slice" >&2
+    exit 1
+  fi
   if ! file "$stage/opendeck-masterhub-linux" | grep -q ELF; then
     echo "opendeck-masterhub-linux is not a Linux executable" >&2
     exit 1

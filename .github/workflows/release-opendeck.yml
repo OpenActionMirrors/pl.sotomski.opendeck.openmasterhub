@@ -10,7 +10,30 @@ permissions:
   contents: read
 
 jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/opendeck-masterhub
+
+      - name: Build the universal macOS plugin binary
+        run: MAC_ONLY=1 sh scripts/package_opendeck_plugin.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opendeck-masterhub-macos
+          path: dist/opendeck-masterhub
+          if-no-files-found: error
+
   release:
+    needs: macos
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -56,8 +79,14 @@ jobs:
       - name: Install cargo-xwin
         run: cargo install cargo-xwin --locked
 
+      - name: Download the macOS plugin binary
+        uses: actions/download-artifact@v4
+        with:
+          name: opendeck-masterhub-macos
+          path: dist
+
       - name: Package the OpenDeck plugin
-        run: sh scripts/package_opendeck_plugin.sh
+        run: MAC_BIN="$PWD/dist/opendeck-masterhub" sh scripts/package_opendeck_plugin.sh
 
       - uses: actions/upload-artifact@v4
         with:

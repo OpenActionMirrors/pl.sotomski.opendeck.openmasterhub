@@ -29,7 +29,7 @@ python3 scripts/validate_plugins.py examples
 
 ## OpenDeck releases
 
-Push a tag that starts with `v`, for example `v0.1.0`. [Release OpenDeck plugin](../.github/workflows/release-opendeck.yml) runs `scripts/package_opendeck_plugin.sh` and attaches `pl.sotomski.opendeck.openmasterhub.sdPlugin.zip` to the GitHub release for that tag. Running the workflow manually only publishes when the selected ref is a tag.
+Push a tag that starts with `v`, for example `v0.1.0`. [Release OpenDeck plugin](../.github/workflows/release-opendeck.yml) builds the universal macOS binary `opendeck-masterhub` on macOS, then runs `scripts/package_opendeck_plugin.sh` on Ubuntu with `MAC_BIN` set to that file, and attaches `pl.sotomski.opendeck.openmasterhub.sdPlugin.zip` to the GitHub release for that tag. Running the workflow manually only publishes when the selected ref is a tag.
 
 ## Layout notes
 
